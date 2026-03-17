@@ -1,0 +1,276 @@
+{
+  "rules": [
+    {
+      "regex": "'([^']+)' is not in the npm registry",
+      "category": "Dependency Error",
+      "tool": "npm",
+      "root_cause": "Invalid npm package name '{0}'",
+      "suggested_fix": "Replace '{0}' with a valid package name in package.json",
+      "manual_fix_steps": "Check the package name spelling and run 'npm install {0}' once corrected.",
+      "strategies": [
+        {
+          "name": "Install Package",
+          "commands": ["npm install {0}"]
+        }
+      ]
+    },
+    {
+      "regex": "not in the npm registry:?\\s*'?([^'\\s]+)'?",
+      "category": "Dependency Error",
+      "tool": "npm",
+      "root_cause": "Invalid npm package name '{0}'",
+      "suggested_fix": "Replace '{0}' with a valid package name",
+      "manual_fix_steps": "Check the package name spelling and run 'npm install {0}' once corrected.",
+      "strategies": [
+        {
+          "name": "Install Package",
+          "commands": ["npm install {0}"]
+        }
+      ]
+    },
+    {
+      "regex": "npm ERR! 404.*'?([^'\\s]+)'?",
+      "category": "Dependency Error",
+      "tool": "npm",
+      "root_cause": "dependency not found '{0}'",
+      "suggested_fix": "Check for typos in package.json dependencies.",
+      "manual_fix_steps": "Run 'npm install {0}' manually or check repository.",
+      "strategies": [
+        {
+          "name": "Install missing npm package",
+          "commands": ["npm install {0}"]
+        }
+      ]
+    },
+    {
+      "regex": "npm ERR! 404",
+      "category": "Dependency Error",
+      "tool": "npm",
+      "root_cause": "dependency not found",
+      "suggested_fix": "Check for typos in package.json dependencies.",
+      "manual_fix_steps": "Run 'npm install' to refresh dependencies.",
+      "strategies": [
+        {
+          "name": "Refresh npm install",
+          "commands": ["npm install"]
+        }
+      ]
+    },
+    {
+      "regex": "ERESOLVE",
+      "category": "Dependency Error",
+      "tool": "npm",
+      "root_cause": "npm peer dependency conflict",
+      "suggested_fix": "Resolve version conflicts or use --legacy-peer-deps",
+      "manual_fix_steps": "Run 'npm install --legacy-peer-deps' to override peer dependency checks.",
+      "strategies": [
+        {
+          "name": "Force Install",
+          "commands": ["npm install --legacy-peer-deps"]
+        }
+      ]
+    },
+    {
+      "regex": "failed to solve with frontend dockerfile",
+      "category": "Docker Error",
+      "tool": "docker",
+      "root_cause": "docker build failure",
+      "suggested_fix": "Check Dockerfile syntax and context.",
+      "manual_fix_steps": "Run 'docker build --no-cache .' and check the Dockerfile syntax.",
+      "strategies": [
+        {
+          "name": "Rebuild Docker image without cache",
+          "commands": ["docker build --no-cache ."]
+        }
+      ]
+    },
+    {
+      "regex": "docker build failed",
+      "category": "Docker Error",
+      "tool": "docker",
+      "root_cause": "docker build failure",
+      "suggested_fix": "Check Dockerfile syntax and context.",
+      "manual_fix_steps": "Run 'docker build --no-cache .' and check the Dockerfile commands.",
+      "strategies": [
+        {
+          "name": "Rebuild Docker image without cache",
+          "commands": ["docker build --no-cache ."]
+        }
+      ]
+    },
+    {
+      "regex": "returned a non-zero code",
+      "category": "Docker Error",
+      "tool": "docker",
+      "root_cause": "docker command failure",
+      "suggested_fix": "Review the failing command in the Dockerfile.",
+      "manual_fix_steps": "Check Dockerfile command and rebuild without cache.",
+      "strategies": [
+        {
+          "name": "Rebuild Docker image without cache",
+          "commands": ["docker build --no-cache ."]
+        }
+      ]
+    },
+    {
+      "regex": "ImagePullBackOff for pod '([^']+)'",
+      "category": "Kubernetes Error",
+      "tool": "kubectl",
+      "root_cause": "container image not found for '{0}'",
+      "suggested_fix": "Verify the image name and registry credentials.",
+      "manual_fix_steps": "Run 'kubectl describe pod {0}' to see the pulling error.",
+      "strategies": [
+        {
+          "name": "Describe Pod",
+          "commands": ["kubectl describe pod {0}"]
+        }
+      ]
+    },
+    {
+      "regex": "ImagePullBackOff",
+      "category": "Kubernetes Error",
+      "tool": "kubectl",
+      "root_cause": "container image not found",
+      "suggested_fix": "Verify the image name and registry credentials.",
+      "manual_fix_steps": "Run 'kubectl describe pod <pod-name>' to verify image pull errors.",
+      "strategies": [
+        {
+          "name": "Describe Pods",
+          "commands": ["kubectl get pods", "kubectl describe pod"]
+        }
+      ]
+    },
+    {
+      "regex": "CrashLoopBackOff for pod '([^']+)'",
+      "category": "Kubernetes Error",
+      "tool": "kubectl",
+      "root_cause": "application crash inside container '{0}'",
+      "suggested_fix": "Check pod logs to identify why the application is crashing.",
+      "manual_fix_steps": "Run 'kubectl logs {0}' to inspect the application crash logs.",
+      "strategies": [
+        {
+          "name": "Check Pod Logs",
+          "commands": ["kubectl logs {0}"]
+        }
+      ]
+    },
+    {
+      "regex": "CrashLoopBackOff",
+      "category": "Kubernetes Error",
+      "tool": "kubectl",
+      "root_cause": "application crash inside container",
+      "suggested_fix": "Check pod logs to identify why the application is crashing.",
+      "manual_fix_steps": "Run 'kubectl logs <pod-name>' to inspect the application crash logs.",
+      "strategies": [
+        {
+          "name": "Check Pod Logs",
+          "commands": ["kubectl logs"]
+        }
+      ]
+    },
+    {
+      "regex": "ModuleNotFoundError: No module named '([^']+)'",
+      "category": "Dependency Error",
+      "tool": "python",
+      "root_cause": "missing python dependency '{0}'",
+      "suggested_fix": "Install the '{0}' module using pip.",
+      "manual_fix_steps": "Run 'pip install {0}' in your environment.",
+      "strategies": [
+        {
+          "name": "Install missing module",
+          "commands": ["pip install {0}"]
+        }
+      ]
+    },
+    {
+      "regex": "ModuleNotFoundError",
+      "category": "Dependency Error",
+      "tool": "python",
+      "root_cause": "missing python dependency",
+      "suggested_fix": "Install the missing module via pip.",
+      "manual_fix_steps": "Run 'pip install <module>' in your environment."
+    },
+    {
+      "regex": "pip install failed for '([^']+)'",
+      "category": "Dependency Error",
+      "tool": "pip",
+      "root_cause": "dependency install error for '{0}'",
+      "suggested_fix": "Check pip logs for details.",
+      "manual_fix_steps": "Run 'pip install {0}' manually to see the error output.",
+      "strategies": [
+        {
+          "name": "Retry pip install",
+          "commands": ["pip install {0}"]
+        }
+      ]
+    },
+    {
+      "regex": "pip install failed",
+      "category": "Dependency Error",
+      "tool": "pip",
+      "root_cause": "dependency install error",
+      "suggested_fix": "Check pip logs for details.",
+      "manual_fix_steps": "Check pip logs and try running 'pip install' manually."
+    },
+    {
+      "regex": "exit code 1",
+      "category": "CI/CD Error",
+      "tool": "CI/CD Pipeline",
+      "root_cause": "pipeline failure",
+      "suggested_fix": "Review the pipeline step logs.",
+      "manual_fix_steps": "Rerun the pipeline and review failed step logs."
+    },
+    {
+      "regex": "Build step marked build as failure",
+      "category": "CI/CD Error",
+      "tool": "CI/CD Pipeline",
+      "root_cause": "CI job failure",
+      "suggested_fix": "Examine previous build steps for errors.",
+      "manual_fix_steps": "Rerun the pipeline and review failed step logs."
+    },
+    {
+      "regex": "permission denied",
+      "category": "Permission Error",
+      "tool": "system",
+      "root_cause": "permission denied",
+      "suggested_fix": "Check file permissions and user privileges.",
+      "manual_fix_steps": "Run 'sudo chmod' or 'sudo chown' to grant appropriate permissions.",
+      "strategies": [
+        {
+          "name": "Change Permissions",
+          "commands": ["sudo chmod 777 ."]
+        }
+      ]
+    },
+    {
+      "regex": "EACCES",
+      "category": "Permission Error",
+      "tool": "npm",
+      "root_cause": "permission issue",
+      "suggested_fix": "Fix directory permissions or avoid running npm as root.",
+      "manual_fix_steps": "Run 'sudo chown -R $USER ~/.npm' or fix directory permissions.",
+      "strategies": [
+        {
+          "name": "Change Owner",
+          "commands": ["sudo chown -R $USER ~/.npm"]
+        }
+      ]
+    },
+    {
+      "regex": "connection timed out",
+      "category": "Network Error",
+      "tool": "network",
+      "root_cause": "connection timed out",
+      "suggested_fix": "Check network connectivity and firewall rules.",
+      "manual_fix_steps": "Check network connectivity and registry availability."
+    },
+    {
+      "regex": "failed to fetch",
+      "category": "Network Error",
+      "tool": "network",
+      "root_cause": "Network fetch failed",
+      "suggested_fix": "Verify URL and network connection.",
+      "manual_fix_steps": "Check network connectivity and registry availability."
+    }
+  ]
+}

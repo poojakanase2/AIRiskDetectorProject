@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Deployment Risk Detector | Operations Dashboard</title>
+    <link rel="stylesheet" href="/static/style.css?v=2">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Chart.js for visualization -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div style="display: flex; align-items: center; gap: 40px;">
+                <div class="logo">
+                    <i data-lucide="shield-check"></i>
+                    AI DEPLOYMENT RISK DETECTOR
+                </div>
+                <div style="display: flex; gap: 20px; border-left: 1px solid var(--border-color); padding-left: 20px;">
+                    <div style="display: flex; align-items: center; gap: 6px; font-size: 0.75rem; color: var(--text-secondary);">
+                        <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--success-neon); box-shadow: 0 0 8px var(--success-neon);"></span>
+                        CPU: OPTIMAL
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 6px; font-size: 0.75rem; color: var(--text-secondary);">
+                        <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--success-neon); box-shadow: 0 0 8px var(--success-neon);"></span>
+                        MEMORY: STABLE
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 6px; font-size: 0.75rem; color: var(--text-secondary);">
+                        <span id="network-dot" style="width: 8px; height: 8px; border-radius: 50%; background: var(--success-neon); box-shadow: 0 0 8px var(--success-neon);"></span>
+                        NW: ACTIVE
+                    </div>
+                </div>
+            </div>
+            <div id="connection-status" class="status-badge status-healthy">
+                <i data-lucide="radio" style="width: 14px; margin-right: 4px;"></i> Live Monitoring
+            </div>
+        </header>
+
+        <nav class="nav-tabs">
+            <div class="nav-tab active" onclick="switchTab('overview')">
+                <i data-lucide="layout-dashboard" style="width: 18px;"></i> Overview
+            </div>
+            <div class="nav-tab" onclick="switchTab('analyzer')">
+                <i data-lucide="terminal" style="width: 18px;"></i> Log Analyzer
+            </div>
+            <div class="nav-tab" onclick="switchTab('settings')">
+                <i data-lucide="settings" style="width: 18px;"></i> Settings
+            </div>
+        </nav>
+
+        <!-- Overview Section -->
+        <main id="overview-section" class="dashboard-grid view-section active">
+            <!-- Risk Score Card -->
+            <section class="card card-risk">
+                <div style="display: flex; justify-content: space-between; align-items: start;">
+                    <h2 style="font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1rem;">Risk Assessment</h2>
+                    <i data-lucide="zap" class="pulse" style="color: var(--warning-neon);"></i>
+                </div>
+                
+                <div class="risk-gauge-container">
+                    <canvas id="riskGauge" width="200" height="200"></canvas>
+                    <div class="risk-score">
+                        <div id="riskValue" class="risk-value">0.12</div>
+                        <div class="risk-label">Score</div>
+                    </div>
+                </div>
+
+                <div id="riskStatus" class="status-badge status-healthy" style="display: block; text-align: center; margin-top: 1rem;">
+                    Healthy
+                </div>
+
+                <div style="margin-top: 2rem;">
+                    <h3 style="font-size: 0.8rem; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 1rem;">Configuration Drift</h3>
+                    <div id="drift-status" style="background: rgba(255,255,255,0.03); padding: 1rem; border-radius: 12px; border: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem;">
+                        <span style="font-size: 0.8rem; color: var(--success-neon);">No drift detected</span>
+                        <i data-lucide="check-circle" style="width: 16px; color: var(--success-neon);"></i>
+                    </div>
+
+                <div style="margin-top: 2rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                        <h3 style="font-size: 0.8rem; text-transform: uppercase; color: var(--text-secondary);">AI Insights</h3>
+                        <span id="recommendation-badge" class="status-badge" style="font-size: 0.6rem; padding: 2px 8px;">Waiting...</span>
+                    </div>
+                    <ul id="riskInsights" style="list-style: none; font-size: 0.9rem; line-height: 1.6; margin-bottom: 1.5rem;">
+                        <li style="display: flex; align-items: center; gap: 8px;">
+                            <i data-lucide="check-circle" style="width: 16px; color: var(--success-neon);"></i>
+                            Initializing systems...
+                        </li>
+                    </ul>
+
+                    <h3 style="font-size: 0.8rem; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 1rem;">Security Scan (Live)</h3>
+                    <div id="vulnerability-list" style="display: flex; flex-direction: column; gap: 8px;">
+                        <div style="font-size: 0.8rem; color: var(--text-secondary); text-align: center; padding: 1rem; border: 1px dashed var(--border-color); border-radius: 12px;">
+                            No active threats detected.
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Metrics Card -->
+            <section class="card card-metrics">
+                <h2 style="font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem;">Deployment Metrics</h2>
+                <div style="height: 300px; width: 100%;">
+                    <canvas id="metricsChart"></canvas>
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-top: 2rem;">
+                    <div style="background: rgba(255,255,255,0.03); padding: 1rem; border-radius: 12px; border: 1px solid var(--border-color);">
+                        <p style="font-size: 0.75rem; color: var(--text-secondary);">Latency</p>
+                        <p id="latency-val" style="font-size: 1.25rem; font-weight: 600; color: var(--primary-neon);">-- ms</p>
+                    </div>
+                    <div style="background: rgba(255,255,255,0.03); padding: 1rem; border-radius: 12px; border: 1px solid var(--border-color);">
+                        <p style="font-size: 0.75rem; color: var(--text-secondary);">Error Rate</p>
+                        <p id="error-val" style="font-size: 1.25rem; font-weight: 600; color: var(--danger-neon);">-- %</p>
+                    </div>
+                    <div style="background: rgba(255,255,255,0.03); padding: 1rem; border-radius: 12px; border: 1px solid var(--border-color);">
+                        <p style="font-size: 0.75rem; color: var(--text-secondary);">Throughput</p>
+                        <p id="throughput-val" style="font-size: 1.25rem; font-weight: 600; color: var(--success-neon);">-- req/s</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Canary Deployment Visualizer -->
+            <section class="card" style="grid-column: span 12; margin-top: 1.5rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+                    <div>
+                        <h2 style="font-size: 1.1rem; color: var(--text-secondary);">Deployment Strategy Manager</h2>
+                        <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 4px;">Dynamic Traffic Control: <span id="strategy-label" style="color: var(--primary-neon);">ROLLING UPDATE</span></p>
+                    </div>
+                    <div id="canary-stats" style="display: flex; gap: 20px;">
+                        <div style="text-align: right;">
+                            <p style="font-size: 0.7rem; color: var(--text-secondary);">BLUE (PROD)</p>
+                            <p id="blue-pct" style="font-size: 1rem; font-weight: 800; color: var(--primary-neon);">100%</p>
+                        </div>
+                        <div style="text-align: right;">
+                            <p style="font-size: 0.7rem; color: var(--text-secondary);">GREEN (NEW)</p>
+                            <p id="green-pct" style="font-size: 1rem; font-weight: 800; color: var(--secondary-neon);">0%</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Monitoring Stats Panel -->
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-top: 1rem; padding: 1.5rem; background: rgba(0, 0, 0, 0.2); border-radius: 12px; border: 1px solid var(--border-color);">
+                    <div class="stat-item">
+                        <div class="stat-label" style="font-size: 0.7rem; color: var(--text-secondary); text-transform: uppercase;">Active Pipelines</div>
+                        <div id="stats-active" class="stat-value" style="font-size: 1.5rem; font-weight: 800; color: var(--primary-neon);">--</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label" style="font-size: 0.7rem; color: var(--text-secondary); text-transform: uppercase;">Failed (Last 24h)</div>
+                        <div id="stats-failed" class="stat-value" style="font-size: 1.5rem; font-weight: 800; color: var(--danger-neon);">--</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label" style="font-size: 0.7rem; color: var(--text-secondary); text-transform: uppercase;">Auto-Fix Success</div>
+                        <div id="stats-success-rate" class="stat-value" style="font-size: 1.5rem; font-weight: 800; color: var(--success-neon);">--%</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label" style="font-size: 0.7rem; color: var(--text-secondary); text-transform: uppercase;">Total Remediations</div>
+                        <div id="stats-remediations" class="stat-value" style="font-size: 1.5rem; font-weight: 800; color: white;">--</div>
+                    </div>
+                </div>
+
+                <div style="position: relative; height: 120px; display: flex; align-items: center; justify-content: space-between; padding: 0 4rem;">
+                    <div id="blue-env" class="env-node pulse" style="width: 80px; height: 80px; border-radius: 20px; border: 2px solid var(--primary-neon); background: rgba(0, 242, 255, 0.1); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; z-index: 2;">
+                        <i data-lucide="server" style="color: var(--primary-neon); width: 24px;"></i>
+                        <span style="font-size: 0.6rem; font-weight: 600;">ACTIVE</span>
+                    </div>
+
+                    <div style="flex-grow: 1; height: 4px; background: var(--border-color); position: relative; margin: 0 20px; border-radius: 99px; overflow: hidden;">
+                        <div id="traffic-flow-bar" style="position: absolute; left: 0; top: 0; bottom: 0; width: 0%; background: linear-gradient(90deg, var(--primary-neon), var(--secondary-neon)); transition: width 0.5s ease; box-shadow: 0 0 15px var(--secondary-neon);"></div>
+                    </div>
+
+                    <div id="green-env" class="env-node" style="width: 80px; height: 80px; border-radius: 20px; border: 2px solid var(--border-color); background: rgba(255, 255, 255, 0.03); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; z-index: 2; transition: all 0.5s ease;">
+                        <i data-lucide="box" style="color: var(--text-secondary); width: 24px; transition: color 0.5s;"></i>
+                        <span id="green-status" style="font-size: 0.6rem; font-weight: 600; color: var(--text-secondary);">INACTIVE</span>
+                    </div>
+                    
+                    <!-- Traffic Particle Animation Container -->
+                    <div id="traffic-connector" style="position: absolute; top: 50%; left: 120px; right: 120px; height: 2px; overflow: hidden; pointer-events: none;"></div>
+                </div>
+            </section>
+
+            <!-- Pipeline Visualizer -->
+            <section class="card card-pipeline">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+                    <h2 style="font-size: 1.1rem; color: var(--text-secondary);">CI/CD Pipeline Flow</h2>
+                    <button id="deploy-btn" onclick="startSimulation()" style="background: linear-gradient(45deg, var(--primary-neon), var(--secondary-neon)); border: none; padding: 0.6rem 1.2rem; border-radius: 12px; color: white; font-weight: 600; cursor: pointer; transition: all 0.3s ease;">
+                        Trigger AI-Safe Deployment
+                    </button>
+                </div>
+                
+                <div class="pipeline-steps">
+                    <div class="pipeline-line"></div>
+                    <div class="step" id="step-build">
+                        <div class="step-icon"><i data-lucide="package" style="width: 20px;"></i></div>
+                        <span style="font-size: 0.75rem;">Build</span>
+                    </div>
+                    <div class="step" id="step-scan">
+                        <div class="step-icon"><i data-lucide="shield" style="width: 20px;"></i></div>
+                        <span style="font-size: 0.75rem;">Security Scan</span>
+                    </div>
+                    <div class="step" id="step-test">
+                        <div class="step-icon"><i data-lucide="test-tube" style="width: 20px;"></i></div>
+                        <span style="font-size: 0.75rem;">Automated Tests</span>
+                    </div>
+                    <div class="step" id="step-deploy">
+                        <div class="step-icon"><i data-lucide="rocket" style="width: 20px;"></i></div>
+                        <span style="font-size: 0.75rem;">Deploy</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Alert & Incident Log -->
+            <section class="card" style="grid-column: span 6;">
+                <h2 style="font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem;">Session Incident Log</h2>
+                <div id="alert-log" style="max-height: 250px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 10px;">
+                    <div style="color: var(--text-secondary); font-style: italic; font-size: 0.9rem; text-align: center; padding: 2rem;">
+                        No incidents recorded in the current session.
+                    </div>
+                </div>
+            </section>
+
+            <!-- Historical Log -->
+            <section class="card" style="grid-column: span 6;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                    <h2 style="font-size: 1.1rem; color: var(--text-secondary);">Risk History (DB)</h2>
+                    <i data-lucide="database" style="width: 16px; color: var(--text-secondary);"></i>
+                </div>
+                <div id="history-log" style="max-height: 250px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 10px;">
+                    <div style="color: var(--text-secondary); font-style: italic; font-size: 0.9rem; text-align: center; padding: 2rem;">
+                        Fetching history...
+                    </div>
+                </div>
+            </section>
+
+            <!-- Notification Center -->
+            <section class="card" style="grid-column: span 4;">
+                <h2 style="font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem;">External Notifications</h2>
+                <div id="notification-center" style="display: flex; flex-direction: column; gap: 12px;">
+                    <div style="background: rgba(255,255,255,0.03); padding: 0.8rem; border-radius: 12px; border: 1px solid var(--border-color); display: flex; align-items: center; gap: 12px; opacity: 0.5;">
+                        <i data-lucide="slack" style="width: 20px; color: #4A154B;"></i>
+                        <span style="font-size: 0.8rem;">Slack Integration Active</span>
+                    </div>
+                    <div style="background: rgba(255,255,255,0.03); padding: 0.8rem; border-radius: 12px; border: 1px solid var(--border-color); display: flex; align-items: center; gap: 12px; opacity: 0.5;">
+                        <i data-lucide="mail" style="width: 20px; color: var(--primary-neon);"></i>
+                        <span style="font-size: 0.8rem;">Email Alerts Standard</span>
+                    </div>
+                </div>
+
+                <div style="margin-top: 2rem;">
+                    <h3 style="font-size: 0.8rem; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 1rem;">Protocol Stress Tests</h3>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                        <button onclick="triggerStress('MALWARE')" style="background: rgba(255, 0, 85, 0.1); border: 1px solid var(--danger-neon); color: var(--danger-neon); padding: 0.5rem; border-radius: 8px; font-size: 0.75rem; cursor: pointer; font-weight: 600;">Injection</button>
+                        <button onclick="triggerStress('DRIFT')" style="background: rgba(255, 204, 0, 0.1); border: 1px solid var(--warning-neon); color: var(--warning-neon); padding: 0.5rem; border-radius: 8px; font-size: 0.75rem; cursor: pointer; font-weight: 600;">Config Drift</button>
+                        <button onclick="triggerStress('LATENCY')" style="background: rgba(0, 242, 255, 0.1); border: 1px solid var(--primary-neon); color: var(--primary-neon); padding: 0.5rem; border-radius: 8px; font-size: 0.75rem; cursor: pointer; font-weight: 600;">Traffic Spike</button>
+                        <button onclick="triggerStress('RECOVERY')" style="background: rgba(0, 255, 136, 0.1); border: 1px solid var(--success-neon); color: var(--success-neon); padding: 0.5rem; border-radius: 8px; font-size: 0.75rem; cursor: pointer; font-weight: 600;">Auto-Heal</button>
+                    </div>
+                </div>
+
+            </section>
+        </main>
+
+        <!-- Log Analyzer Section -->
+        <main id="analyzer-section" class="view-section">
+            <div class="card" style="margin-bottom: 1.5rem;">
+                <h2 style="font-size: 1.5rem; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 12px; color: white;">
+                    <i data-lucide="shield-check" style="color: var(--success-neon); width: 28px; height: 28px;"></i> CI/CD Auto-Remediation Platform
+                </h2>
+                <p style="color: var(--text-secondary); font-size: 1rem; margin-bottom: 2rem;">
+                    Autonomous failure detection & self-healing for <span style="color: var(--primary-neon);">Jenkins</span>, 
+                    <span style="color: var(--secondary-neon);">GitHub Actions</span>, 
+                    <span style="color: var(--warning-neon);">GitLab</span>, and 
+                    <span style="color: var(--success-neon);">ArgoCD</span>.
+                </p>
+                
+                <div style="background: rgba(0, 242, 255, 0.05); border: 1px solid rgba(0, 242, 255, 0.2); padding: 1.5rem; border-radius: 16px; margin-bottom: 2rem;">
+                    <h3 style="color: white; font-size: 0.9rem; margin-bottom: 1rem; text-transform: uppercase; letter-spacing: 1px; display: flex; align-items: center; gap: 8px;">
+                        <i data-lucide="link" style="width: 16px;"></i> Automated Jenkins Ingestion
+                    </h3>
+                    <div style="display: flex; gap: 12px; align-items: stretch;">
+                        <div style="flex: 1; position: relative;">
+                            <i data-lucide="box" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); width: 16px; color: var(--text-secondary);"></i>
+                            <input type="text" id="jenkins-job-name" placeholder="Enter Jenkins Job Name (e.g. backend-pipeline)" style="width: 100%; background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); padding: 0.8rem 1rem 0.8rem 2.5rem; border-radius: 10px; color: white;">
+                        </div>
+                        <button id="pull-btn" onclick="remediateJenkinsJob()" style="background: var(--primary-neon); color: black; border: none; padding: 0.8rem 1.5rem; border-radius: 10px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 8px;">
+                            <i data-lucide="download-cloud"></i> Pull & Remediate
+                        </button>
+                    </div>
+                    <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.8rem;">
+                        <i data-lucide="info" style="width: 12px; height: 12px; display: inline; vertical-align: middle;"></i> 
+                        The platform will connect to your Jenkins instance, pull the latest logs, and use Azure OpenAI to fix.
+                    </p>
+                </div>
+
+                <div class="analyzer-grid">
+                    <div style="display: flex; flex-direction: column; gap: 1rem;">
+                        <div id="log-input-container" style="position: relative;">
+                            <textarea id="log-input" class="log-input-area" placeholder="Paste error logs from Jenkins, GitHub Actions, Docker, etc..."></textarea>
+                            <div id="highlight-overlay" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; padding: 1.5rem; font-family: 'Fira Code', monospace; font-size: 0.85rem; line-height: 1.5; color: transparent; white-space: pre-wrap; overflow: hidden;"></div>
+                        </div>
+                        <div style="display: flex; gap: 10px;">
+                            <button id="analyze-btn" onclick="analyzePipelineLog()" style="flex: 1; background: rgba(0, 242, 255, 0.1); border: 1px solid var(--primary-neon); padding: 1rem; border-radius: 12px; color: var(--primary-neon); font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; transition: all 0.2s;">
+                                <i data-lucide="search"></i> Analyze Log
+                            </button>
+                            <button id="autofix-btn" onclick="autoFixPipeline()" style="flex: 1; background: linear-gradient(45deg, var(--warning-neon), var(--danger-neon)); border: none; padding: 1rem; border-radius: 12px; color: white; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; transition: transform 0.2s; box-shadow: 0 0 15px rgba(255, 0, 85, 0.4);">
+                                <i data-lucide="wrench"></i> AUTO FIX PIPELINE
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="analysis-results" class="result-panel" style="display: none;">
+                        <div class="result-item" style="border-left: 4px solid var(--primary-neon);">
+                            <div class="result-label">Problem Category</div>
+                            <div id="res-category" class="result-content" style="color: var(--primary-neon);">Build Failure</div>
+                        </div>
+                        
+                        <div class="result-item">
+                            <div class="result-label">Detected Tool</div>
+                            <div id="res-tool" class="result-content">--</div>
+                        </div>
+
+                        <div class="result-item" style="border-left: 4px solid var(--secondary-neon);">
+                            <div class="result-label">Pipeline Source</div>
+                            <div id="res-source-platform" class="result-content" style="color: var(--secondary-neon); font-weight: 700;">--</div>
+                        </div>
+
+                        <div class="result-item" style="border-left: 4px solid var(--secondary-neon);">
+                            <div class="result-label">Analysis Source</div>
+                            <div id="res-source" class="result-content" style="color: var(--secondary-neon);">Rule Engine</div>
+                        </div>
+
+                        <div class="result-item" id="res-ai-insight-section" style="display: none; background: rgba(0, 242, 255, 0.05); border: 1px solid var(--primary-neon);">
+                            <div class="result-label">AI Insight (Azure OpenAI)</div>
+                            <div id="res-ai-insight" class="result-content" style="font-style: italic; color: white;">--</div>
+                        </div>
+
+                        <div class="result-item">
+                            <div class="result-label">Root Cause Analysis</div>
+                            <div id="res-root-cause" class="result-content">The compiler could not find the specified dependency in the local or remote repository.</div>
+                        </div>
+
+                        <div class="result-item">
+                            <div class="result-label">Suggested Fix</div>
+                            <div id="res-fix" class="result-content" style="margin-bottom: 1rem;">Update your pom.xml/build.gradle to point to the correct repository or run a force-update.</div>
+                            <div id="res-commands" style="display: flex; flex-direction: column; gap: 8px;">
+                                <!-- Commands will be injected here -->
+                            </div>
+                        </div>
+
+                        <div class="result-item">
+                            <div class="result-label">Manual Fix Steps</div>
+                            <div id="res-manual-steps" class="result-content" style="font-size: 0.85rem; line-height: 1.6; color: var(--text-secondary);">--</div>
+                        </div>
+
+                        <div class="result-item">
+                            <div class="result-label">Confidence Score</div>
+                            <div class="confidence-container" style="margin-top: 8px;">
+                                <div id="res-conf-bar" class="confidence-bar" style="width: 0%;"></div>
+                            </div>
+                            <div id="res-confidence" class="result-content" style="font-size: 0.8rem; margin-top: 4px;"></div>
+                        </div>
+
+                        <div class="result-item" id="res-correction-section" style="display: none; border-left: 4px solid var(--secondary-neon);">
+                            <div class="result-label">AI Correction Suggestion</div>
+                            <div class="result-content">
+                                <span style="color: var(--text-secondary);">Suggested Package:</span> 
+                                <span id="res-suggested-pkg" style="color: var(--secondary-neon); font-weight: 800;">--</span>
+                            </div>
+                            <div class="result-content" style="font-size: 0.75rem;">
+                                <span style="color: var(--text-secondary);">Confidence:</span> 
+                                <span id="res-correction-conf">--</span>
+                            </div>
+                        </div>
+
+                        <div class="result-item">
+                            <div class="result-label">Auto-Fix Availability</div>
+                            <div id="res-autofix" class="result-content"></div>
+                        </div>
+
+                        <div class="result-item" style="display: none;">
+                            <div class="result-label">Prevention Tips & Best Practices</div>
+                            <ul id="res-tips" style="padding-left: 1.2rem; font-size: 0.9rem; color: var(--text-secondary); line-height: 1.6;">
+                                <!-- Tips will be injected here -->
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div id="autofix-results" class="result-panel" style="display: none; flex-direction: column;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem;">
+                            <h3 style="color: white; display: flex; align-items: center; gap: 8px;">
+                                <i data-lucide="activity" style="color: var(--warning-neon);"></i> AUTO FIX PLANNER
+                            </h3>
+                            <span id="autofix-badge" class="status-badge" style="font-size: 0.75rem;">RUNNING</span>
+                        </div>
+                        
+                        <div class="result-item" style="border-left: 4px solid var(--warning-neon);">
+                            <div style="display: flex; justify-content: space-between; align-items: start;">
+                                <div>
+                                    <div class="result-label">Problem Category</div>
+                                    <div id="autofix-category" class="result-content" style="color: var(--warning-neon);">--</div>
+                                </div>
+                                <div style="text-align: right;">
+                                    <div class="result-label">Source</div>
+                                    <div id="autofix-source" style="font-size: 0.7rem; color: var(--text-secondary);">Rule Engine</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="result-item">
+                            <div class="result-label">Detected Tool</div>
+                            <div id="autofix-tool" class="result-content">--</div>
+                        </div>
+
+                        <div class="result-item">
+                            <div class="result-label">Pipeline Source</div>
+                            <div id="autofix-source-platform" class="result-content" style="color: var(--secondary-neon); font-weight: 700;">--</div>
+                        </div>
+
+                        <div class="result-item">
+                            <div class="result-label">Root Cause Analysis</div>
+                            <div id="autofix-root-cause" class="result-content" style="font-size: 0.85rem; line-height:1.7;">--</div>
+                        </div>
+
+                        <div class="result-item" id="autofix-correction-section" style="display: none; border-bottom: 1px solid rgba(0, 242, 255, 0.1); padding-bottom: 1rem;">
+                            <div class="result-label">Correction Details</div>
+                            <div class="result-content">
+                                <span style="color: var(--text-secondary);">Replace:</span> 
+                                <span id="autofix-orig-pkg" style="color: var(--danger-neon); text-decoration: line-through;">--</span>
+                                <i data-lucide="arrow-right" style="width: 12px; margin: 0 4px;"></i>
+                                <span id="autofix-sugg-pkg" style="color: var(--success-neon); font-weight: 800;">--</span>
+                            </div>
+                        </div>
+
+                        <div class="result-item">
+                            <div class="result-label">Confidence Score</div>
+                            <div id="autofix-confidence" class="result-content">--</div>
+                        </div>
+
+                        <div class="result-item" id="autofix-command-section">
+                            <div class="result-label">Auto Fix Command</div>
+                            <div id="autofix-command" style="margin-top: 8px;">--</div>
+                        </div>
+
+                        <div class="result-item" style="flex-grow: 1;">
+                            <div class="result-label">Manual Fix Steps</div>
+                            <div id="autofix-manual-steps" class="result-content" style="font-size: 0.85rem; line-height: 1.7; color: var(--text-secondary);">--</div>
+                        </div>
+
+                        <div class="result-item" style="background: rgba(0, 255, 136, 0.05); border: 1px solid var(--success-neon);">
+                            <div class="result-label" style="color: var(--success-neon);">AUTO FIX EXECUTION STATUS</div>
+                            <div id="autofix-execution-status" class="result-content" style="font-weight: 800; color: white;">Awaiting Execution...</div>
+                        </div>
+
+                        <div class="result-item">
+                            <div class="result-label">Pipeline Retry Status</div>
+                            <div id="autofix-retry-status" class="result-content" style="font-size: 0.9rem;">--</div>
+                        </div>
+                    </div>
+
+                    <!-- Placeholder for default state -->
+                    <div id="analysis-placeholder" class="card" style="display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; background: rgba(255,255,255,0.01); border-style: dashed;">
+                        <i data-lucide="clipboard-list" style="width: 48px; height: 48px; color: var(--border-color); margin-bottom: 1rem;"></i>
+                        <h3 style="color: var(--text-secondary);">Awaiting Input</h3>
+                        <p style="color: var(--text-secondary); font-size: 0.8rem; max-width: 200px;">Paste a log and click analyze to see results here.</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Settings Section -->
+        <main id="settings-section" class="view-section">
+            <div class="card" style="grid-column: span 12;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+                    <h2 style="font-size: 1.1rem; color: var(--text-secondary);">Advanced AI Configuration</h2>
+                    <button onclick="saveConfiguration()" style="background: rgba(0, 242, 255, 0.1); border: 1px solid var(--primary-neon); color: var(--primary-neon); padding: 0.4rem 1rem; border-radius: 8px; font-size: 0.75rem; cursor: pointer; font-weight: 600;">Save Settings</button>
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 2rem;">
+                    <div>
+                        <h3 style="font-size: 0.8rem; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 1rem;">AI Risk Sensitivity</h3>
+                        <input type="range" id="risk-threshold-input" min="0.1" max="0.9" step="0.05" value="0.6" style="width: 100%; accent-color: var(--primary-neon);">
+                        <div style="display: flex; justify-content: space-between; margin-top: 8px;">
+                            <span style="font-size: 0.7rem; color: var(--text-secondary);">Aggressive</span>
+                            <span id="threshold-val" style="font-size: 0.8rem; font-weight: 700; color: var(--primary-neon);">0.60</span>
+                            <span style="font-size: 0.7rem; color: var(--text-secondary);">Strict Safety</span>
+                        </div>
+                    </div>
+                    <div>
+                        <h3 style="font-size: 0.8rem; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 1rem;">Canary Batch Steps (%)</h3>
+                        <input type="text" id="canary-steps-input" value="10, 25, 50, 75, 100" style="width: 100%; background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.5rem; border-radius: 8px; font-size: 0.8rem;">
+                        <p style="font-size: 0.65rem; color: var(--text-secondary); margin-top: 5px;">Comma-separated traffic percentages.</p>
+                    </div>
+                    <div>
+                        <h3 style="font-size: 0.8rem; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 1rem;">Step Duration (ms)</h3>
+                        <input type="number" id="step-delay-input" value="1500" style="width: 100%; background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.5rem; border-radius: 8px; font-size: 0.8rem;">
+                        <p style="font-size: 0.65rem; color: var(--text-secondary); margin-top: 5px;">Wait time between traffic shifts.</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+        
+        <footer style="margin-top: 3rem; text-align: center; color: var(--text-secondary); font-size: 0.8rem;">
+            &copy; 2026 AI Deployment Risk Detector Framework. Built for Safe CI/CD.
+        </footer>
+    </div>
+
+    <script src="/static/app.js?v=5"></script>
+</body>
+</html>
