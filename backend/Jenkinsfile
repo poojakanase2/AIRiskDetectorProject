@@ -9,7 +9,8 @@ pipeline {
         stage('Test') {
             steps {
                 echo 'Running tests...'
-                sh 'exit 0' // Replace with actual test command
+                // Replace the following line with your actual test command
+                sh 'npm test'
             }
         }
         stage('Deploy') {
