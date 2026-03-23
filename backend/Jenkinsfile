@@ -1,4 +1,4 @@
-// Example Jenkinsfile
+// Example Jenkinsfile with corrected Test stage
 pipeline {
     agent any
     stages {
@@ -11,13 +11,12 @@ pipeline {
             steps {
                 echo 'Running tests...'
                 // Replace the following line with your actual test command
-                sh 'npm test'
+                sh 'npm test' // or 'mvn test', 'pytest', etc.
             }
         }
         stage('Deploy') {
             steps {
                 echo 'Deploying...'
-                // Deployment steps here
             }
         }
     }
