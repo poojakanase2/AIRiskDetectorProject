@@ -10,8 +10,7 @@ pipeline {
             steps {
                 echo 'Running tests...'
                 // Replace the following line with your actual test command
-                sh 'echo "No tests implemented yet"'
-                // Example: sh 'npm test' or sh 'pytest'
+                sh 'npm test'
             }
         }
         stage('Deploy') {
