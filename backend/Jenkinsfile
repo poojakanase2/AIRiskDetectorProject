@@ -1,3 +1,4 @@
+// Example corrected Jenkinsfile (please adjust as per your actual pipeline)
 pipeline {
     agent any
     stages {
