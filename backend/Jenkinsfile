@@ -3,8 +3,9 @@ pipeline {
     stages {
         stage('Build') {
             steps {
-                echo 'Building project...'
+                sh 'make build'
             }
         }
+        // Add other stages here, ensuring all steps are inside 'steps' blocks
     }
 }
