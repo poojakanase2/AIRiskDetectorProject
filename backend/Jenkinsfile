@@ -3,14 +3,12 @@ pipeline {
     stages {
         stage('Build') {
             steps {
-                echo 'Building project...'
+                echo 'Building...'
             }
         }
         stage('Test') {
             steps {
-                echo 'Running tests...'
-                // Replace with actual test command
-                sh 'echo "Tests passed"'
+                echo 'Testing...'
             }
         }
         stage('Deploy') {
