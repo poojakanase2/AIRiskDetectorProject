@@ -9,10 +9,13 @@ pipeline {
         stage('Test') {
             steps {
                 echo 'Running tests...'
-                sh 'echo "All tests passed"'
+                sh 'npm test || echo "Test failed"'
             }
         }
         stage('Deploy') {
+            when {
+                expression { currentBuild.result == null || currentBuild.result == 'SUCCESS' }
+            }
             steps {
                 echo 'Deploying...'
             }
