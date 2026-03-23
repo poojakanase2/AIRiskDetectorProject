@@ -9,8 +9,7 @@ pipeline {
         stage('Test') {
             steps {
                 echo 'Running tests...'
-                // Replace the following line with your actual test command
-                sh 'echo "All tests passed"'
+                sh 'exit 0' // Replace with actual test command
             }
         }
         stage('Deploy') {
