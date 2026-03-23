@@ -1,4 +1,4 @@
-from fastapi import FastAPI, BackgroundTasks, WebSocket
+from fastapi import FastAPI, BackgroundTasks, WebSocket, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -6,11 +6,13 @@ from simulation import RiskSimulator, LogAnalyzer, AutoFixer, CICollector
 from database import init_db, SessionLocal, RiskAssessmentRecord, LogAnalysisRecord, get_db
 import asyncio
 import os
+import re
 from datetime import datetime
 from typing import Optional, List
 from pydantic import BaseModel
 from dotenv import load_dotenv
 import uvicorn
+import tempfile
 
 # Load environment variables
 load_dotenv()
@@ -29,8 +31,73 @@ app.add_middleware(
 )
 
 simulator = RiskSimulator()
+# Initialize autonomous settings
+simulator.config["autonomous_healing"] = True
+simulator.config["monitor_interval_sec"] = 45
+
 log_analyzer = LogAnalyzer()
 autofixer = AutoFixer()
+
+# Track which jobs we are currently investigating
+active_healing_jobs = set()
+REMEDIATION_LOG = os.path.join(tempfile.gettempdir(), "remediation.log")
+
+async def autonomous_healing_monitor():
+    """Background task that polls Jenkins and performs autonomous repairs."""
+    print("[AUTONOMOUS] Starting Jenkins Self-Healing Engine...")
+    while True:
+        if simulator.config.get("autonomous_healing"):
+            try:
+                # 1. Fetch Failed Jobs
+                failed_jobs = await asyncio.to_thread(CICollector.get_failed_jenkins_jobs)
+                
+                for job_id in failed_jobs:
+                    if job_id in active_healing_jobs:
+                        continue
+                    
+                    print(f"[AUTONOMOUS] Detected FAILURE in job: {job_id}. Initiating AI repair...")
+                    active_healing_jobs.add(job_id)
+                    
+                    try:
+                        # 2. Fetch Logs
+                        logs = await asyncio.to_thread(CICollector.fetch_logs, "Jenkins", job_id)
+                        
+                        # 3. Analyze Logs
+                        analysis = await asyncio.to_thread(log_analyzer.analyze, logs)
+                        
+                        # 4. Apply Auto-Fix
+                        fix_result = await asyncio.to_thread(autofixer.run_auto_remediation, analysis, job_id, "Jenkins")
+                        
+                        # 5. Log Result
+                        print(f"[AUTONOMOUS] Repair complete for {job_id}: {fix_result.get('execution_status')}")
+                        
+                        # Update global stats
+                        simulator.update_remediation_stats(
+                            "Jenkins", 
+                            fix_result.get("execution_status", "Manual Fix Required")
+                        )
+                    except Exception as e:
+                        print(f"[AUTONOMOUS] Error repairing {job_id}: {e}")
+                    finally:
+                        # Wait some time before handling this job again if it stays failed
+                        # In real world we might want tracking of 'fix attempts' to avoid loops
+                        pass
+                
+                # Cleanup active healing set (only jobs that ARE NOT in failed list anymore)
+                all_current_failed = set(failed_jobs)
+                for job in list(active_healing_jobs):
+                    if job not in all_current_failed:
+                        print(f"[AUTONOMOUS] Job {job} is now recovered. Clearing from active watch.")
+                        active_healing_jobs.remove(job)
+
+            except Exception as e:
+                print(f"[AUTONOMOUS] Monitor Loop Error: {e}")
+        
+        await asyncio.sleep(int(simulator.config.get("monitor_interval_sec", 45)))
+
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(autonomous_healing_monitor())
 
 class LogAnalysisRequest(BaseModel):
     log_text: str
@@ -56,12 +123,18 @@ class AutoFixRequest(BaseModel):
     log_text: str
 
 class AutoFixResponse(BaseModel):
-    category: str
-    detected_tool: str
-    root_cause: str
-    auto_fix_available: bool
-    retry_status: str
-    pipeline_source: str
+    category: Optional[str] = "Unknown"
+    detected_tool: Optional[str] = "Unknown"
+    root_cause: Optional[str] = "Unknown"
+    execution_status: Optional[str] = "N/A"
+    confidence_score: Optional[float] = 0.0
+    analysis_source: Optional[str] = "Rule Engine"
+    auto_fix_available: Optional[bool] = False
+    auto_fix_command: Optional[str] = ""
+    manual_fix_steps: Optional[str] = ""
+    retry_status: Optional[str] = "N/A"
+    pipeline_source: Optional[str] = "Unknown"
+    remediation_mode: Optional[str] = "Standard"
     original_log: Optional[str] = None
     highlighted_lines: List[int] = []
 
@@ -105,13 +178,43 @@ async def get_history(limit: int = 10):
         db.close()
 
 @app.get("/api/pipeline/simulate")
-async def simulate_pipeline():
+async def simulate_pipeline(auto_fix: bool = False):
     steps = ["Build", "Security Scan", "Unit Tests", "Integration Tests"]
     results = []
+    
     for step in steps:
-        results.append(simulator.simulate_pipeline_step(step))
-        if results[-1]["status"] == "FAILED":
+        # Simulate the step behavior
+        step_result = simulator.simulate_pipeline_step(step)
+        results.append(step_result)
+        
+        if step_result["status"] == "FAILED":
+            if auto_fix:
+                print(f"[SIMULATION] Auto-fixing failure in step: {step}")
+                # Analyze failure logs
+                try:
+                    analysis = await asyncio.wait_for(
+                        asyncio.to_thread(log_analyzer.analyze, step_result["logs"]),
+                        timeout=30.0
+                    )
+                    # Run auto-remediation
+                    fix_result = await asyncio.wait_for(
+                        asyncio.to_thread(autofixer.run_auto_remediation, analysis, "sim-job-123", step_result["source"]),
+                        timeout=15.0
+                    )
+                    step_result["remediation"] = fix_result
+                    
+                    # Update monitoring stats
+                    simulator.update_remediation_stats(
+                        step_result["source"],
+                        fix_result.get("execution_status", "Manual Fix Required")
+                    )
+                except Exception as e:
+                    print(f"[SIMULATION] Auto-fix failed to execute: {e}")
+                    step_result["remediation_error"] = str(e)
+            
+            # Stop pipeline on failure
             break
+            
     return results
 
 @app.post("/api/remediate-job", response_model=AutoFixResponse)
@@ -122,41 +225,64 @@ async def remediate_job(request: PullRemediationRequest):
     print(f"[API] Pull remediation request for {request.source} job: {request.job_id}")
     
     # 1. Fetch Logs
-    logs = await asyncio.to_thread(CICollector.fetch_logs, request.source, request.job_id)
-    if not logs or logs == "Default pipeline log snippet...":
-        # Check if we were expecting real logs
-        token = os.getenv("JENKINS_API_TOKEN")
-        if request.source == "Jenkins" and not token:
-            print("[WARNING] Jenkins API Token missing. Using simulated logs.")
-
-    # 2. Analyze Logs
     try:
-        analysis = await asyncio.wait_for(
-            asyncio.to_thread(log_analyzer.analyze, logs),
-            timeout=30.0
-        )
-    except Exception as e:
-        print(f"[API] Pull analysis failed: {e}")
-        analysis = log_analyzer._fallback_result(logs)
-        analysis["category"] = "Analysis Error"
-        analysis["root_cause"] = str(e)
+        with open(REMEDIATION_LOG, "a") as f: f.write(f"\n[API] Pull remediation START for {request.job_id}")
+        logs = await asyncio.to_thread(CICollector.fetch_logs, request.source, request.job_id)
+        if not logs or "[ERROR]" in logs:
+            error_msg = logs if logs else "Failed to fetch logs from Jenkins."
+            with open(REMEDIATION_LOG, "a") as f: f.write(f"\n[API] Log fetch FAILED: {error_msg}")
+            return {
+                "execution_status": "Remediation Aborted",
+                "retry_status": "Log Fetch Error",
+                "root_cause": error_msg,
+                "original_log": logs or "Log capture failed."
+            }
+        
+        with open(REMEDIATION_LOG, "a") as f: f.write(f"\n[API] Logs fetched: {len(logs)} bytes")
+            
+        # 2. Analyze Logs
+        try:
+            analysis = await asyncio.wait_for(
+                asyncio.to_thread(log_analyzer.analyze, logs),
+                timeout=30.0
+            )
+            with open(REMEDIATION_LOG, "a") as f: f.write(f"\n[API] Analysis OK: {analysis.get('category')}")
+        except Exception as e:
+            with open(REMEDIATION_LOG, "a") as f: f.write(f"\n[API] Analysis FAILED: {e}")
+            analysis = log_analyzer._fallback_result(logs)
+            analysis["category"] = "Analysis Error"
+            analysis["root_cause"] = f"AI analysis timed out or failed: {str(e)}"
 
-    # 3. Apply Auto-Fix
-    fix_result = await asyncio.wait_for(
-        asyncio.to_thread(autofixer.run_auto_remediation, analysis, request.job_id, request.source),
-        timeout=15.0
-    )
-    
-    # Update stats
-    simulator.update_remediation_stats(
-        request.source,
-        fix_result.get("execution_status", "Manual Fix Required")
-    )
-    
-    # Include logs in the response so UI can show them
-    fix_result["original_log"] = logs
-    
-    return fix_result
+        # 3. Apply Auto-Fix
+        try:
+            with open(REMEDIATION_LOG, "a") as f: f.write(f"\n[API] Starting Fixer...")
+            fix_result = await asyncio.wait_for(
+                asyncio.to_thread(autofixer.run_auto_remediation, analysis, request.job_id, request.source),
+                timeout=20.0
+            )
+            with open(REMEDIATION_LOG, "a") as f: f.write(f"\n[API] Fix result: {fix_result.get('execution_status')}")
+        except Exception as e:
+            with open(REMEDIATION_LOG, "a") as f: f.write(f"\n[API] Fixer CRASHED: {e}")
+            return {
+                "execution_status": "Remediation Engine Error",
+                "retry_status": "Internal Failure",
+                "root_cause": f"AutoFixer encountered an error: {str(e)}",
+                "original_log": logs
+            }
+        
+        # Update stats
+        simulator.update_remediation_stats(
+            request.source,
+            fix_result.get("execution_status", "Manual Fix Required")
+        )
+        
+        # Include logs in the response so UI can show them
+        fix_result["original_log"] = logs
+        return fix_result
+
+    except Exception as e:
+        with open("/tmp/remediation.log", "a") as f: f.write(f"\n[API] CRITICAL FAILURE: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal Server Error during remediation: {str(e)}")
 
 @app.post("/api/analyze-log", response_model=LogAnalysisResponse)
 async def analyze_log(request: LogAnalysisRequest):
@@ -184,7 +310,7 @@ async def analyze_log(request: LogAnalysisRequest):
     try:
         log_text_raw = request.log_text
         record = LogAnalysisRecord(
-            log_snippet=log_text_raw[0:500], # Store first 500 chars
+            log_snippet=log_text_raw[:500], # Store first 500 chars
             category=analysis["category"],
             root_cause=analysis["root_cause"],
             suggested_fix=analysis["suggested_fix"],
@@ -212,6 +338,16 @@ async def autofix_pipeline(request: AutoFixRequest):
         # Step 2: AutoFixer analyzes environment and prepares the fix plan
         # Try to detect job name from logs if possible
         detected_job = "test-pipeline" if "test-pipeline" in request.log_text else None
+        
+        # Heuristic: Look for job name in Jenkins logs if common patterns exist
+        if not detected_job:
+            job_match = re.search(r"job/([\w-]+)/", request.log_text)
+            if job_match:
+                detected_job = job_match.group(1)
+            elif "Started by" in request.log_text:
+                # If it's a Jenkins log, but job name isn't in URL, check if we can find it
+                # Often in Console Output it's not explicitly named unless in URLs
+                pass
         
         fix_result = await asyncio.wait_for(
             asyncio.to_thread(autofixer.run_auto_remediation, analysis, detected_job, analysis.get("pipeline_source")),
@@ -245,6 +381,14 @@ async def autofix_pipeline(request: AutoFixRequest):
             "original_log": request.log_text
         }
 
+@app.post("/api/admin/stress")
+async def trigger_stress(mode: str):
+    if mode == "RECOVERY":
+        simulator.stress_mode = None
+    else:
+        simulator.stress_mode = mode
+    return {"status": "success", "mode": mode}
+
 @app.get("/api/health")
 async def health():
     return {"status": "healthy", "service": "AI Engine"}
@@ -263,7 +407,8 @@ async def websocket_endpoint(websocket: WebSocket):
             
             await websocket.send_json({
                 "metrics": metrics,
-                "assessment": assessment
+                "assessment": assessment,
+                "monitoring_stats": simulator.monitoring_stats
             })
             await asyncio.sleep(2)
     except Exception as e:

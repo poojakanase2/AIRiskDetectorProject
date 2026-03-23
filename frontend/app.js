@@ -12,6 +12,17 @@ let historyData = {
     errors: Array(20).fill(0)
 };
 
+// Autonomous Monitor State
+let scanCountdown = 45;
+setInterval(() => {
+    const el = document.getElementById('scan-countdown');
+    if (el) {
+        scanCountdown--;
+        if (scanCountdown < 0) scanCountdown = 45;
+        el.innerText = scanCountdown;
+    }
+}, 1000);
+
 // Initialize Metrics Chart
 function initCharts() {
     metricsChart = new Chart(metricsCtx, {
@@ -61,7 +72,8 @@ function initCharts() {
 // WebSocket Connection
 let socket;
 function connectWebSocket() {
-    socket = new WebSocket('ws://localhost:8000/ws/stats');
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    socket = new WebSocket(`${protocol}//${window.location.host}/ws/stats`);
 
     socket.onopen = () => {
         console.log('Successfully connected to AI Engine WebSocket');
@@ -102,6 +114,15 @@ function renderDashboard(data) {
     const statusEl = document.getElementById('riskStatus');
     statusEl.innerText = assessment.status;
     statusEl.className = `status-badge status-${assessment.status.toLowerCase()}`;
+
+    // Update Autonomous Stats
+    if (data.monitoring_stats) {
+        document.getElementById('autonomous-intervention-count').innerText = `${data.monitoring_stats.total_remediations} Fixes Applied`;
+        document.getElementById('stats-active').innerText = data.monitoring_stats.active_pipelines;
+        document.getElementById('stats-failed').innerText = data.monitoring_stats.failed_pipelines;
+        document.getElementById('stats-success-rate').innerText = `${data.monitoring_stats.success_rate.toFixed(1)}%`;
+        document.getElementById('stats-remediations').innerText = data.monitoring_stats.total_remediations;
+    }
 
     // Update Recommendation Badge
     const recBadge = document.getElementById('recommendation-badge');
@@ -181,7 +202,13 @@ function renderDashboard(data) {
         `;
     }
 
-    lucide.createIcons();
+    // Only create icons for elements that might have new ones, not the whole body
+    // This prevents UI stuttering and high CPU in the browser
+    const containers = ['riskInsights', 'vulnerability-list', 'drift-status', 'cost-suggestions', 'recommendation-badge'];
+    containers.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) lucide.createIcons({ props: {}, attrs: {}, nameAttr: 'data-lucide', root: el });
+    });
 
     // Update Chart
     historyData.latency.shift();
@@ -230,7 +257,7 @@ function logIncident(type, message) {
 // History DB Sync
 async function updateHistory() {
     try {
-        const response = await fetch('http://localhost:8000/api/history?limit=10');
+        const response = await fetch('/api/history?limit=10');
         if (!response.ok) return;
         const data = await response.json();
         
@@ -276,7 +303,7 @@ async function updateDashboard() {
     if (socket && socket.readyState === WebSocket.OPEN) return;
 
     try {
-        const response = await fetch('http://localhost:8000/api/health');
+        const response = await fetch('/api/health');
         if (!response.ok) throw new Error('Backend unreachable');
         const data = await response.json();
         renderDashboard(data);
@@ -303,36 +330,89 @@ function simulateLocalData() {
 
 // Pipeline Simulation Logic
 async function startSimulation() {
-    const steps = ['step-build', 'step-scan', 'step-test', 'step-deploy'];
+    const steps = ['Build', 'Security Scan', 'Unit Tests', 'Integration Tests'];
+    const stepIds = {
+        'Build': 'step-build',
+        'Security Scan': 'step-scan',
+        'Unit Tests': 'step-test',
+        'Integration Tests': 'step-deploy'
+    };
     
-    steps.forEach(id => {
+    // UI Reset
+    Object.values(stepIds).forEach(id => {
         document.getElementById(id).classList.remove('step-success', 'step-active', 'step-failed');
     });
-
-    for (let i = 0; i < steps.length; i++) {
-        const id = steps[i];
-        const el = document.getElementById(id);
-        el.classList.add('step-active');
+    
+    const deployBtn = document.getElementById('deploy-btn');
+    deployBtn.disabled = true;
+    
+    // Get Auto-Heal Mode status
+    const autoHealEnabled = document.getElementById('auto-heal-toggle').checked;
+    
+    try {
+        // Start backend simulation
+        const response = await fetch(`/api/pipeline/simulate?auto_fix=${autoHealEnabled}`);
+        if (!response.ok) throw new Error("Simulation request failed");
         
-        await new Promise(r => setTimeout(r, 1500));
+        const results = await response.json();
         
-        const success = Math.random() > 0.15;
-        el.classList.remove('step-active');
-        
-        if (success) {
-            el.classList.add('step-success');
-        } else {
-            el.classList.add('step-failed');
-            const stepName = id.replace('step-', '').toUpperCase();
-            logIncident('CRITICAL', `Deployment pipeline failed at ${stepName} step. Automatic rollback triggered.`);
-            document.getElementById('deploy-btn').disabled = false;
-            return;
+        for (let i = 0; i < results.length; i++) {
+            const res = results[i];
+            const elId = stepIds[res.step];
+            const el = document.getElementById(elId);
+            
+            // Mark as active
+            el.classList.add('step-active');
+            await new Promise(r => setTimeout(r, 800)); // Visual delay
+            el.classList.remove('step-active');
+            
+            if (res.status === 'SUCCESS') {
+                el.classList.add('step-success');
+            } else {
+                el.classList.add('step-failed');
+                
+                if (res.remediation) {
+                    const fix = res.remediation;
+                    logIncident('WARNING', `Pipeline failed at ${res.step}. AI Auto-Fix Triggered...`);
+                    
+                    // Show self-healing feedback
+                    await new Promise(r => setTimeout(r, 1000));
+                    
+                    if (fix.execution_status === 'Fix Applied Successfully') {
+                        logIncident('HEALTHY', `AI applied fix: ${fix.auto_fix_command}. Retrying step...`);
+                        el.classList.remove('step-failed');
+                        el.classList.add('step-success');
+                        
+                        // Switch to Analyzer tab to show details
+                        switchTab('analyzer');
+                        displayAutoFixResult(fix);
+                        
+                        // Briefly pulse to show "healed"
+                        el.parentElement.classList.add('pulse');
+                        setTimeout(() => el.parentElement.classList.remove('pulse'), 2000);
+                        
+                        continue; // Proceed to next steps in the loop
+                    } else {
+                        logIncident('CRITICAL', `Auto-Fix failed for ${res.step}. Manual intervention required.`);
+                    }
+                } else {
+                    logIncident('CRITICAL', `Pipeline failed at ${res.step}. Deployment halted.`);
+                }
+                
+                deployBtn.disabled = false;
+                return; // Stop simulation on failure
+            }
         }
+        
+        // If all steps (including potential fixes) succeeded
+        await startCanaryRollout();
+        
+    } catch (err) {
+        console.error("Simulation Error:", err);
+        logIncident('CRITICAL', "Failed to connect to AI Simulation Engine.");
+    } finally {
+        deployBtn.disabled = false;
     }
-
-    // If pipeline succeeds, start Canary Rollout
-    await startCanaryRollout();
-    document.getElementById('deploy-btn').disabled = false;
 }
 
 async function startCanaryRollout() {
@@ -353,10 +433,10 @@ async function startCanaryRollout() {
     greenStatus.style.color = 'var(--secondary-neon)';
 
     // Traffic Shifting Steps
-    const configResponse = await fetch('http://localhost:8000/api/admin/config');
+    const configResponse = await fetch('/api/admin/config');
     const activeConfig = await configResponse.json();
     const rolloutSteps = activeConfig.canary_steps || [10, 25, 50, 75, 100];
-    const stepDelay = activeConfig.step_delay_ms || 1500;
+    const stepDelay = activeConfig.step_delay_ms || 500;
 
     for (let pct of rolloutSteps) {
         // Check if AI risk is too high during rollout
@@ -405,7 +485,7 @@ function resetCanary() {
 
 async function triggerStress(mode) {
     try {
-        const response = await fetch(`http://localhost:8000/api/admin/stress?mode=${mode}`, {
+        const response = await fetch(`/api/admin/stress?mode=${mode}`, {
             method: 'POST'
         });
         const data = await response.json();
@@ -430,7 +510,7 @@ async function triggerStress(mode) {
 // Configuration Management
 async function loadConfiguration() {
     try {
-        const response = await fetch('http://localhost:8000/api/admin/config');
+        const response = await fetch('/api/admin/config');
         const config = await response.json();
         
         document.getElementById('risk-threshold-input').value = config.risk_threshold;
@@ -449,7 +529,7 @@ async function saveConfiguration() {
     const delay = parseInt(document.getElementById('step-delay-input').value);
 
     try {
-        const response = await fetch('http://localhost:8000/api/admin/config', {
+        const response = await fetch('/api/admin/config', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -516,7 +596,7 @@ async function analyzePipelineLog() {
     lucide.createIcons();
 
     try {
-        const response = await fetch('http://localhost:8000/api/analyze-log', {
+        const response = await fetch('/api/analyze-log', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ log_text: logText })
@@ -644,7 +724,7 @@ async function remediateJenkinsJob() {
     lucide.createIcons();
 
     try {
-        const response = await fetch('http://localhost:8000/api/remediate-job', {
+        const response = await fetch('/api/remediate-job', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ source: 'Jenkins', job_id: jobName })
@@ -770,7 +850,7 @@ async function autoFixPipeline() {
     document.getElementById('autofix-retry-status').innerText = "--";
 
     try {
-        const response = await fetch('http://localhost:8000/api/autofix', {
+        const response = await fetch('/api/autofix', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ log_text: logText })
@@ -796,7 +876,7 @@ async function autoFixPipeline() {
 // Monitoring Stats
 async function fetchMonitoringStats() {
     try {
-        const response = await fetch('http://localhost:8000/api/monitoring');
+        const response = await fetch('/api/monitoring');
         if (!response.ok) return;
         const stats = await response.json();
         
