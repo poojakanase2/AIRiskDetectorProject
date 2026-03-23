@@ -1,0 +1,22 @@
+pipeline {
+    agent any
+    stages {
+        stage('Build') {
+            steps {
+                echo 'Building project...'
+            }
+        }
+        stage('Test') {
+            steps {
+                echo 'Running tests...'
+                // Replace the following line with your actual test command
+                sh 'npm test'
+            }
+        }
+        stage('Deploy') {
+            steps {
+                echo 'Deploying...'
+            }
+        }
+    }
+}
