@@ -1,4 +1,3 @@
-// Example Jenkinsfile
 pipeline {
     agent any
     stages {
@@ -11,13 +10,13 @@ pipeline {
             steps {
                 echo 'Running tests...'
                 // Replace the following line with your actual test command
-                sh 'npm test'
+                sh 'echo "No tests implemented yet"'
+                // Example: sh 'npm test' or sh 'mvn test'
             }
         }
         stage('Deploy') {
             steps {
                 echo 'Deploying...'
-                // Deployment steps here
             }
         }
     }
