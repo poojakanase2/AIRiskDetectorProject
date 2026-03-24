@@ -1,12 +1,9 @@
 pipeline {
     agent any
-    environment {
-        MY_VAR = "HelloWorld"
-    }
     stages {
-        stage('Example') {
+        stage('Build') {
             steps {
-                echo "MY_VAR is ${env.MY_VAR}"
+                echo 'No shared library used. Build step executing.'
             }
         }
     }
