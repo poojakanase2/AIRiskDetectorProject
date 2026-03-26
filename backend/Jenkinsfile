@@ -3,7 +3,17 @@ pipeline {
     stages {
         stage('Build') {
             steps {
-                echo 'No shared library used. Build step executing.'
+                echo 'Building...'
+            }
+        }
+        stage('Test') {
+            steps {
+                echo 'Testing...'
+            }
+        }
+        stage('Deploy') {
+            steps {
+                echo 'Deploying...'
             }
         }
     }
