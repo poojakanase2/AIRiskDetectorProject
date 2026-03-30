@@ -1,16 +1,17 @@
 pipeline {
     agent any
+    environment {
+        NODE_ENV = 'production'
+    }
     stages {
-        stage('Initialize') {
+        stage('Build') {
             steps {
-                echo 'Initializing...'
+                echo "Building..."
             }
         }
         stage('Test') {
             steps {
-                // Fixed simulation logic
-                echo 'Running simulation test...'
-                // Add actual test commands here
+                echo "Testing..."
             }
         }
     }
