@@ -1,12 +1,22 @@
 pipeline {
     agent any
     environment {
-        NODE_ENV = 'production'
+        JENKINS_URL = 'http://your-jenkins-url'
+        JENKINS_TOKEN = 'your-api-token'
     }
     stages {
+        stage('Validate Jenkins Config') {
+            steps {
+                script {
+                    if (!env.JENKINS_URL || !env.JENKINS_TOKEN) {
+                        error('Jenkins URL and Token must be configured.')
+                    }
+                }
+            }
+        }
         stage('Build') {
             steps {
-                echo "Building in ${NODE_ENV} mode"
+                echo 'Building...'
             }
         }
     }
