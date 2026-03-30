@@ -1,0 +1,45 @@
+[PIPELINE-LOG] Azure OpenAI Client Initialized.
+[AUTONOMOUS] Starting Jenkins Self-Healing Engine...
+INFO:     127.0.0.1:56875 - "GET /api/health HTTP/1.1" 200 OK
+New WebSocket connection accepted
+INFO:     127.0.0.1:56875 - "GET /api/monitoring HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56880 - "GET /api/history?limit=10 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56875 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56875 - "GET /api/history?limit=10 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56880 - "GET /api/monitoring HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56880 - "GET /api/history?limit=10 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56875 - "GET /api/monitoring HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56875 - "GET /api/history?limit=10 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56880 - "GET /api/monitoring HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56878 - "GET /api/history?limit=10 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56877 - "GET /api/monitoring HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56877 - "GET /api/history?limit=10 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56878 - "GET /api/monitoring HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56878 - "GET /api/history?limit=10 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56877 - "GET /api/monitoring HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56877 - "GET /api/history?limit=10 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56878 - "GET /api/monitoring HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56876 - "GET /api/history?limit=10 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56881 - "GET /api/monitoring HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56881 - "GET /api/history?limit=10 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56882 - "GET /api/monitoring HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56882 - "GET /api/history?limit=10 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56881 - "GET /api/monitoring HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56888 - "GET /api/history?limit=10 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56889 - "GET /api/monitoring HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56899 - "GET /api/history?limit=10 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56900 - "GET /api/monitoring HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56904 - "GET /api/history?limit=10 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56905 - "GET /api/monitoring HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56905 - "GET /api/history?limit=10 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56904 - "GET /api/monitoring HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56904 - "GET /api/history?limit=10 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56905 - "GET /api/monitoring HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56905 - "GET /api/history?limit=10 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56904 - "GET /api/monitoring HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56911 - "GET /api/history?limit=10 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56912 - "GET /api/monitoring HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56912 - "GET /api/history?limit=10 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56911 - "GET /api/monitoring HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56911 - "GET /api/history?limit=10 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56911 - "GET /api/monitoring HTTP/1.1" 200 OK

@@ -41,6 +41,19 @@ class LogAnalysisRecord(Base):
     commands = Column(JSON) # List of strings
     prevention_tips = Column(JSON) # List of strings
 
+class HealingHistoryRecord(Base):
+    __tablename__ = "healing_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    timestamp = Column(DateTime, default=datetime.datetime.utcnow)
+    job_id = Column(String)
+    source = Column(String) # e.g. Jenkins, GitHub Actions
+    category = Column(String)
+    root_cause = Column(String)
+    execution_status = Column(String) # Fix Applied & Pushed, Universal Bypass, etc.
+    retry_status = Column(String)
+    confidence = Column(Float)
+
 # Create tables
 def init_db():
     Base.metadata.create_all(bind=engine)

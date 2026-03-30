@@ -3,12 +3,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from simulation import RiskSimulator, LogAnalyzer, AutoFixer, CICollector
-from database import init_db, SessionLocal, RiskAssessmentRecord, LogAnalysisRecord, get_db
+from database import init_db, SessionLocal, RiskAssessmentRecord, LogAnalysisRecord, HealingHistoryRecord, get_db
 import asyncio
 import os
 import re
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Any
 from pydantic import BaseModel
 from dotenv import load_dotenv
 import uvicorn
@@ -33,13 +33,14 @@ app.add_middleware(
 simulator = RiskSimulator()
 # Initialize autonomous settings
 simulator.config["autonomous_healing"] = True
-simulator.config["monitor_interval_sec"] = 45
+simulator.config["monitor_interval_sec"] = 60
 
 log_analyzer = LogAnalyzer()
 autofixer = AutoFixer()
 
-# Track which jobs we are currently investigating
+# Track which jobs# Registry for background healing tasks
 active_healing_jobs = set()
+LAST_JOB_ID = "new-pipeline2" # Default fallback
 REMEDIATION_LOG = os.path.join(tempfile.gettempdir(), "remediation.log")
 
 async def autonomous_healing_monitor():
@@ -49,12 +50,16 @@ async def autonomous_healing_monitor():
         if simulator.config.get("autonomous_healing"):
             try:
                 # 1. Fetch Failed Jobs
+                config = CICollector.get_jenkins_config()
+                if not config.get("token") or not config.get("url"):
+                    # print("[AUTONOMOUS] Jenkins not configured. Skipping scan...")
+                    await asyncio.sleep(30)
+                    continue
+
                 failed_jobs = await asyncio.to_thread(CICollector.get_failed_jenkins_jobs)
                 
                 for job_id in failed_jobs:
-                    if job_id in active_healing_jobs:
-                        continue
-                    
+                    # Allow multiple attempts if needed (removing strict block)
                     print(f"[AUTONOMOUS] Detected FAILURE in job: {job_id}. Initiating AI repair...")
                     active_healing_jobs.add(job_id)
                     
@@ -62,26 +67,18 @@ async def autonomous_healing_monitor():
                         # 2. Fetch Logs
                         logs = await asyncio.to_thread(CICollector.fetch_logs, "Jenkins", job_id)
                         
-                        # 3. Analyze Logs
-                        analysis = await asyncio.to_thread(log_analyzer.analyze, logs)
+                        # 3. Analyze Logs (Passing job_id for context)
+                        analysis = await asyncio.to_thread(log_analyzer.analyze, logs, job_id)
                         
-                        # 4. Apply Auto-Fix
-                        fix_result = await asyncio.to_thread(autofixer.run_auto_remediation, analysis, job_id, "Jenkins")
+                        # [CHANGED] Background monitor now ONLY scans and analyzes.
+                        # It no longer performs auto-remediation automatically.
+                        print(f"[AUTONOMOUS] Analysis complete for {job_id}: {analysis.get('category')}")
                         
-                        # 5. Log Result
-                        print(f"[AUTONOMOUS] Repair complete for {job_id}: {fix_result.get('execution_status')}")
+                        # Update global stats to reflect a failure was detected
+                        simulator.monitoring_stats["failed_pipelines"] = len(failed_jobs)
                         
-                        # Update global stats
-                        simulator.update_remediation_stats(
-                            "Jenkins", 
-                            fix_result.get("execution_status", "Manual Fix Required")
-                        )
                     except Exception as e:
-                        print(f"[AUTONOMOUS] Error repairing {job_id}: {e}")
-                    finally:
-                        # Wait some time before handling this job again if it stays failed
-                        # In real world we might want tracking of 'fix attempts' to avoid loops
-                        pass
+                        print(f"[AUTONOMOUS] Error analyzing {job_id}: {e}")
                 
                 # Cleanup active healing set (only jobs that ARE NOT in failed list anymore)
                 all_current_failed = set(failed_jobs)
@@ -104,7 +101,7 @@ class LogAnalysisRequest(BaseModel):
 
 class LogAnalysisResponse(BaseModel):
     category: str
-    tool: str
+    tool: Any
     root_cause: str
     suggested_fix: str
     confidence: float
@@ -121,10 +118,11 @@ class LogAnalysisResponse(BaseModel):
 
 class AutoFixRequest(BaseModel):
     log_text: str
+    job_id: Optional[str] = None
 
 class AutoFixResponse(BaseModel):
     category: Optional[str] = "Unknown"
-    detected_tool: Optional[str] = "Unknown"
+    detected_tool: Optional[Any] = "Unknown"
     root_cause: Optional[str] = "Unknown"
     execution_status: Optional[str] = "N/A"
     confidence_score: Optional[float] = 0.0
@@ -141,6 +139,11 @@ class AutoFixResponse(BaseModel):
 class PullRemediationRequest(BaseModel):
     source: str  # e.g., "Jenkins"
     job_id: str
+
+class JenkinsConfig(BaseModel):
+    url: str
+    user: str
+    token: str
 
 @app.get("/")
 async def root():
@@ -159,6 +162,65 @@ async def update_config(config: dict):
     if "risk_threshold" in config:
         simulator.config["risk_threshold"] = float(config["risk_threshold"])
     return simulator.config
+
+@app.get("/api/jenkins/config")
+async def get_jenkins_config():
+    return CICollector.get_jenkins_config()
+
+@app.post("/api/jenkins/config")
+async def update_jenkins_config(config: JenkinsConfig):
+    # Update in-memory
+    CICollector.set_jenkins_config(config.url, config.user, config.token)
+    
+    # Persist to .env to survive hot-reloads/restarts
+    try:
+        env_path = os.path.join(os.path.dirname(__file__), ".env")
+        lines = []
+        if os.path.exists(env_path):
+            with open(env_path, "r") as f:
+                lines = f.readlines()
+        
+        # Update or add lines
+        new_lines = []
+        keys_to_update = {
+            "JENKINS_URL": config.url.rstrip('/'),
+            "JENKINS_USER": config.user,
+            "JENKINS_API_TOKEN": config.token
+        }
+        
+        found_keys = set()
+        for line in lines:
+            updated = False
+            for key, val in keys_to_update.items():
+                if line.strip().startswith(key) or line.strip().startswith(f"# {key}"):
+                    new_lines.append(f"{key}={val}\n")
+                    found_keys.add(key)
+                    updated = True
+                    break
+            if not updated:
+                new_lines.append(line)
+        
+        # Add keys that weren't in the file
+        for key, val in keys_to_update.items():
+            if key not in found_keys:
+                new_lines.append(f"{key}={val}\n")
+        
+        with open(env_path, "w") as f:
+            f.writelines(new_lines)
+            
+        return {"status": "success", "message": "Jenkins configuration updated and persisted."}
+    except Exception as e:
+        print(f"[ERROR] Failed to persist config to .env: {e}")
+        return {"status": "success", "message": "Jenkins configuration updated (memory only). Persistence error."}
+
+@app.post("/api/jenkins/test")
+async def test_jenkins_connection(config: JenkinsConfig):
+    result = await asyncio.to_thread(CICollector.test_connection, config.url, config.user, config.token)
+    if not result["success"]:
+        # We don't raise 401/403 here because it's a test connection endpoint 
+        # that should return the error message in the body for the UI
+        pass
+    return result
 
 @app.get("/api/monitoring")
 async def get_monitoring():
@@ -193,7 +255,7 @@ async def simulate_pipeline(auto_fix: bool = False):
                 # Analyze failure logs
                 try:
                     analysis = await asyncio.wait_for(
-                        asyncio.to_thread(log_analyzer.analyze, step_result["logs"]),
+                        asyncio.to_thread(log_analyzer.analyze, step_result["logs"], "simulation-job"),
                         timeout=30.0
                     )
                     # Run auto-remediation
@@ -220,19 +282,20 @@ async def simulate_pipeline(auto_fix: bool = False):
 @app.post("/api/remediate-job", response_model=AutoFixResponse)
 async def remediate_job(request: PullRemediationRequest):
     """
-    Pull-based remediation: Fetches logs, analyzes them, and attempts a fix.
+    Pull-based analysis: Fetches logs and analyzes them, but does NOT perform an auto-fix.
+    The fix must be manually triggered via the 'Auto-Fix' button.
     """
-    print(f"[API] Pull remediation request for {request.source} job: {request.job_id}")
+    print(f"[API] Pull analysis request for {request.source} job: {request.job_id}")
     
     # 1. Fetch Logs
     try:
-        with open(REMEDIATION_LOG, "a") as f: f.write(f"\n[API] Pull remediation START for {request.job_id}")
+        with open(REMEDIATION_LOG, "a") as f: f.write(f"\n[API] Pull analysis START for {request.job_id}")
         logs = await asyncio.to_thread(CICollector.fetch_logs, request.source, request.job_id)
         if not logs or "[ERROR]" in logs:
             error_msg = logs if logs else "Failed to fetch logs from Jenkins."
             with open(REMEDIATION_LOG, "a") as f: f.write(f"\n[API] Log fetch FAILED: {error_msg}")
             return {
-                "execution_status": "Remediation Aborted",
+                "execution_status": "Analysis Aborted",
                 "retry_status": "Log Fetch Error",
                 "root_cause": error_msg,
                 "original_log": logs or "Log capture failed."
@@ -243,7 +306,7 @@ async def remediate_job(request: PullRemediationRequest):
         # 2. Analyze Logs
         try:
             analysis = await asyncio.wait_for(
-                asyncio.to_thread(log_analyzer.analyze, logs),
+                asyncio.to_thread(log_analyzer.analyze, logs, request.job_id),
                 timeout=30.0
             )
             with open(REMEDIATION_LOG, "a") as f: f.write(f"\n[API] Analysis OK: {analysis.get('category')}")
@@ -253,36 +316,28 @@ async def remediate_job(request: PullRemediationRequest):
             analysis["category"] = "Analysis Error"
             analysis["root_cause"] = f"AI analysis timed out or failed: {str(e)}"
 
-        # 3. Apply Auto-Fix
-        try:
-            with open(REMEDIATION_LOG, "a") as f: f.write(f"\n[API] Starting Fixer...")
-            fix_result = await asyncio.wait_for(
-                asyncio.to_thread(autofixer.run_auto_remediation, analysis, request.job_id, request.source),
-                timeout=20.0
-            )
-            with open(REMEDIATION_LOG, "a") as f: f.write(f"\n[API] Fix result: {fix_result.get('execution_status')}")
-        except Exception as e:
-            with open(REMEDIATION_LOG, "a") as f: f.write(f"\n[API] Fixer CRASHED: {e}")
-            return {
-                "execution_status": "Remediation Engine Error",
-                "retry_status": "Internal Failure",
-                "root_cause": f"AutoFixer encountered an error: {str(e)}",
-                "original_log": logs
-            }
+        # Prepare a response that shows the analysis without execution results
+        response = {
+            "category": analysis.get("category", "Unknown"),
+            "detected_tool": analysis.get("tool", "Unknown"),
+            "root_cause": analysis.get("root_cause", "Unknown"),
+            "execution_status": "Observation Mode (No Fix Applied)",
+            "retry_status": "Manual Action Required",
+            "auto_fix_available": len(analysis.get("commands", [])) > 0 or analysis.get("analyzer_file_correction") is not None,
+            "auto_fix_command": analysis["commands"][0] if analysis.get("commands") else "",
+            "manual_fix_steps": analysis.get("manual_fix_steps", "N/A"),
+            "confidence_score": analysis.get("confidence", 0.0),
+            "analysis_source": analysis.get("analysis_source", "AI Engine"),
+            "pipeline_source": request.source,
+            "original_log": logs,
+            "highlighted_lines": analysis.get("highlighted_lines", [])
+        }
         
-        # Update stats
-        simulator.update_remediation_stats(
-            request.source,
-            fix_result.get("execution_status", "Manual Fix Required")
-        )
-        
-        # Include logs in the response so UI can show them
-        fix_result["original_log"] = logs
-        return fix_result
+        return response
 
     except Exception as e:
-        with open("/tmp/remediation.log", "a") as f: f.write(f"\n[API] CRITICAL FAILURE: {e}")
-        raise HTTPException(status_code=500, detail=f"Internal Server Error during remediation: {str(e)}")
+        with open(REMEDIATION_LOG, "a") as f: f.write(f"\n[API] CRITICAL FAILURE: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal Server Error during pull analysis: {str(e)}")
 
 @app.post("/api/analyze-log", response_model=LogAnalysisResponse)
 async def analyze_log(request: LogAnalysisRequest):
@@ -326,28 +381,30 @@ async def analyze_log(request: LogAnalysisRequest):
 
 @app.post("/api/autofix", response_model=AutoFixResponse)
 async def autofix_pipeline(request: AutoFixRequest):
-    print(f"[API] POST /api/autofix | Log length: {len(request.log_text)}")
+    print(f"[API] POST /api/autofix | JobID: {request.job_id} | Log length: {len(request.log_text)}")
+    
+    global LAST_JOB_ID
+    if request.job_id: LAST_JOB_ID = request.job_id
+    
     try:
-        # Combined timeout for parsing + planning
-        analysis = await asyncio.wait_for(
-            asyncio.to_thread(log_analyzer.analyze, request.log_text),
-            timeout=30.0
-        )
-        print(f"[API] Phase 1 (Parsing) complete: {analysis.get('category')}")
-        
         # Step 2: AutoFixer analyzes environment and prepares the fix plan
-        # Try to detect job name from logs if possible
-        detected_job = "test-pipeline" if "test-pipeline" in request.log_text else None
+        # Priority: 1. Request Job ID, 2. Regex Detection, 3. Manual Fallback
+        detected_job = request.job_id
         
-        # Heuristic: Look for job name in Jenkins logs if common patterns exist
+        # Heuristic search if not explicitly provided
         if not detected_job:
             job_match = re.search(r"job/([\w-]+)/", request.log_text)
             if job_match:
                 detected_job = job_match.group(1)
-            elif "Started by" in request.log_text:
-                # If it's a Jenkins log, but job name isn't in URL, check if we can find it
-                # Often in Console Output it's not explicitly named unless in URLs
-                pass
+            elif "Building in workspace" in request.log_text:
+                ws_match = re.search(r"workspace\\([\w-]+)", request.log_text)
+                if ws_match: detected_job = ws_match.group(1)
+
+        # Combined timeout for parsing + planning
+        analysis = await asyncio.wait_for(
+            asyncio.to_thread(log_analyzer.analyze, request.log_text, detected_job or "manual-upload"),
+            timeout=30.0
+        )
         
         fix_result = await asyncio.wait_for(
             asyncio.to_thread(autofixer.run_auto_remediation, analysis, detected_job, analysis.get("pipeline_source")),
@@ -363,6 +420,61 @@ async def autofix_pipeline(request: AutoFixRequest):
         
         # Include log text for UI display
         fix_result["original_log"] = request.log_text
+        
+        # [NEW] Persist Remediation History to Database
+        db = SessionLocal()
+        try:
+            record = HealingHistoryRecord(
+                job_id=target_job,
+                source=fix_result.get("pipeline_source", "Unknown"),
+                category=fix_result.get("category", "Unknown"),
+                root_cause=fix_result.get("root_cause", "Unknown"),
+                execution_status=fix_result.get("execution_status", "N/A"),
+                retry_status=fix_result.get("retry_status", "N/A"),
+                confidence=fix_result.get("confidence_score", 0.0)
+            )
+            db.add(record)
+            db.commit()
+            print(f"[DB] Remediation history saved for {target_job}.")
+        except Exception as db_err:
+            print(f"[DB ERROR] Failed to save history: {db_err}")
+        finally:
+            db.close()
+
+        # Step 3: TRIGGER BUILD EVERY TIME (Orange button requirement)
+        target_job = detected_job or "manual-upload"
+        
+        # [NEW] Persist Remediation History to Database
+        db = SessionLocal()
+        try:
+            record = HealingHistoryRecord(
+                job_id=target_job,
+                source=fix_result.get("pipeline_source", "Unknown"),
+                category=fix_result.get("category", "Unknown"),
+                root_cause=fix_result.get("root_cause", "Unknown"),
+                execution_status=fix_result.get("execution_status", "N/A"),
+                retry_status=fix_result.get("retry_status", "N/A"),
+                confidence=fix_result.get("confidence_score", 0.0)
+            )
+            db.add(record)
+            db.commit()
+            print(f"[DB] Remediation history saved for {target_job}.")
+        except Exception as db_err:
+            print(f"[DB ERROR] Failed to save history: {db_err}")
+        finally:
+            db.close()
+
+        if target_job != "manual-upload":
+            print(f"[API] Auto-Fix Button: Force triggering build for {target_job}")
+            CICollector.trigger_retry("Jenkins", target_job)
+            fix_result["retry_status"] = f"Action Triggered for {target_job}. Build starting..."
+        else:
+            # Fallback if no job detected (just triggers first in list if available)
+            all_jobs = CICollector.get_all_jobs()
+            if all_jobs:
+                CICollector.trigger_retry("Jenkins", all_jobs[0])
+                fix_result["retry_status"] = f"Action Triggered for {all_jobs[0]} (Fallback)."
+
         return fix_result
     except Exception as e:
         print(f"[API] AutoFix error: {e}")
@@ -388,6 +500,29 @@ async def trigger_stress(mode: str):
     else:
         simulator.stress_mode = mode
     return {"status": "success", "mode": mode}
+
+@app.get("/api/healing/history")
+async def get_healing_history():
+    """Returns the history of all remediation attempts."""
+    db = SessionLocal()
+    try:
+        # Fetch last 50 remediation attempts
+        records = db.query(HealingHistoryRecord).order_by(HealingHistoryRecord.timestamp.desc()).limit(50).all()
+        return [
+            {
+                "id": r.id,
+                "timestamp": r.timestamp.isoformat(),
+                "job_id": r.job_id,
+                "source": r.source,
+                "category": r.category,
+                "root_cause": r.root_cause,
+                "execution_status": r.execution_status,
+                "retry_status": r.retry_status,
+                "confidence": r.confidence
+            } for r in records
+        ]
+    finally:
+        db.close()
 
 @app.get("/api/health")
 async def health():

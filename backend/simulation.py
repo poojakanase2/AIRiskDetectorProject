@@ -14,13 +14,46 @@ import tempfile
 class CICollector:
     """Simulates fetching logs from various CI/CD platforms, with real Jenkins integration."""
     
+    # In-memory storage for dynamic Jenkins configuration
+    _jenkins_config = {
+        "url": os.getenv("JENKINS_URL", ""),
+        "user": os.getenv("JENKINS_USER") or os.getenv("JENKINS_USERNAME") or "",
+        "token": os.getenv("JENKINS_API_TOKEN", "")
+    }
+    
     @staticmethod
     def get_jenkins_config():
-        return {
-            "url": os.getenv("JENKINS_URL", "http://localhost:8080"),
-            "user": os.getenv("JENKINS_USER") or os.getenv("JENKINS_USERNAME") or "admin",
-            "token": os.getenv("JENKINS_API_TOKEN", "")
+        return CICollector._jenkins_config
+
+    @staticmethod
+    def set_jenkins_config(url: str, user: str, token: str):
+        CICollector._jenkins_config = {
+            "url": url.rstrip('/'),
+            "user": user,
+            "token": token
         }
+        print(f"[COLLECTOR] Jenkins configuration updated: {url}")
+
+    @staticmethod
+    def test_connection(url: str, user: str, token: str) -> dict:
+        """Verifies connectivity with Jenkins using provided credentials."""
+        try:
+            # Try to fetch basic system info
+            api_url = f"{url.rstrip('/')}/api/json"
+            response = requests.get(api_url, auth=(user, token), timeout=10)
+            
+            if response.status_code == 200:
+                return {"success": True, "message": "Successfully connected to Jenkins."}
+            elif response.status_code == 401:
+                return {"success": False, "message": "Authentication failed: Invalid username or API token."}
+            elif response.status_code == 403:
+                return {"success": False, "message": "Access denied: User does not have sufficient permissions."}
+            else:
+                return {"success": False, "message": f"Failed to connect. Status: {response.status_code}"}
+        except requests.exceptions.ConnectionError:
+            return {"success": False, "message": "Connection error: Could not reach the Jenkins server. Check the URL."}
+        except Exception as e:
+            return {"success": False, "message": f"An unexpected error occurred: {str(e)}"}
 
     @staticmethod
     def fetch_logs(source: str, job_id: str) -> str:
@@ -57,10 +90,12 @@ class CICollector:
 
                 except Exception as e:
                     return f"[ERROR] Jenkins fetch failed: {e}"
+            else:
+                return "[ERROR] Jenkins is not configured. Go to 'Settings' and enter your URL and Token."
 
-        # Simulation fallback
+        # Simulation fallback for other platforms/tests
         print(f"[SIMULATION] Returning simulated logs for {source}...")
-        return f"[{source}] Starting build...\n[{source}] Step 1: Initialize\n[{source}] Step 2: Test\n[{source}] ERROR: Simulation error for {job_id}\n[{source}] Finished: FAILURE"
+        return f"[{source}] Finished: FAILURE\n[ERROR] Simulated error for {job_id}"
 
     @staticmethod
     def get_all_jobs() -> List[str]:
@@ -118,7 +153,11 @@ class CICollector:
                 timeout=20
             )
             if response.status_code == 200:
-                print(f"[COLLECTOR] Script Output: {response.text[:200]}...")
+                output = response.text
+                if "Exception" in output or "Error" in output or "No such property" in output:
+                    print(f"[ERROR] Jenkins script had a runtime error: {output[:300]}")
+                    return False
+                print(f"[COLLECTOR] Script Output: {output[:200]}...")
                 return True
             else:
                 print(f"[ERROR] Jenkins script failed with status: {response.status_code}")
@@ -128,20 +167,46 @@ class CICollector:
             return False
 
     @staticmethod
+    def get_jenkins_crumb() -> Dict[str, str]:
+        """Fetches a CSRF crumb from Jenkins if protection is enabled."""
+        config = CICollector.get_jenkins_config()
+        if not config["token"]: return {}
+        try:
+            crumb_url = f"{config['url']}/crumbIssuer/api/json"
+            response = requests.get(crumb_url, auth=(config["user"], config["token"]), timeout=5)
+            if response.status_code == 200:
+                data = response.json()
+                return {data["crumbRequestField"]: data["crumb"]}
+        except Exception:
+            pass
+        return {}
+
+    @staticmethod
     def trigger_retry(source: str, job_id: str) -> bool:
-        """Triggers a retry of the failed pipeline."""
+        """Triggers a retry of the failed pipeline with CSRF support."""
         if source == "Jenkins":
             config = CICollector.get_jenkins_config()
             if config["token"]:
                 try:
                     print(f"[COLLECTOR] Triggering REAL Jenkins retry for {job_id}...")
-                    retry_url = f"{config['url']}/job/{job_id}/build"
+                    
+                    # Ensure unique URL to bypass any server-side caching
+                    import time
+                    retry_url = f"{config['url']}/job/{job_id}/build?delay=0sec&_t={int(time.time()*1000)}"
+                    
+                    headers = CICollector.get_jenkins_crumb()
                     response = requests.post(
                         retry_url,
                         auth=(config["user"], config["token"]),
+                        headers=headers,
                         timeout=10
                     )
-                    return response.status_code in [200, 201, 202]
+                    success = response.status_code in [200, 201, 202]
+                    if success:
+                        print(f"[COLLECTOR] Jenkins build started for {job_id}. Status: {response.status_code}")
+                    else:
+                        print(f"[ERROR] Jenkins trigger failed: {response.status_code} - {response.text}")
+                    return success
                 except Exception as e:
                     print(f"[ERROR] Jenkins retry failed: {e}")
                     return False
@@ -584,15 +649,43 @@ class AutoFixer:
                         print(f"[AUTO-REMEDIATION] File {target_path} updated locally. Committing to Git...")
                         
                         # Committing and pushing to origin ensures Jenkins can see the fix
-                        if self.git_commit_and_push(target_path, f"Auto-fix remediation for {job_id}"):
+                        success, git_err = self.git_commit_and_push(target_path, f"Auto-fix remediation for {job_id}")
+                        if success:
                             execution_status = "Fix Applied & Pushed"
                             is_safe_to_run = True
                             target_job = job_id or "unknown-job"
-                            CICollector.trigger_retry(source, target_job)
                             retry_status = f"Git Push Success. Pipeline retry triggered for {target_job}."
                         else:
                             execution_status = "Local Fix OK, Git Push Failed"
-                            retry_status = "Check Git permissions/remote."
+                            print(f"[AUTO-REMEDIATION] Git push failed. Attempting Universal Jenkins Bypass for {job_id}...")
+                            
+                            # UNIVERSAL FALLBACK: If Git fails but we are on Jenkins, apply the fix via Groovy SCM-Bypass
+                            if source == "Jenkins" and job_id and ("Jenkinsfile" in target_path or target_path.endswith(".groovy")):
+                                bypass_script = f"""
+import org.jenkinsci.plugins.workflow.job.WorkflowJob
+import org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition
+import jenkins.model.Jenkins
+
+def jobName = '{job_id}'
+def newCode = '''{new_content}'''
+def job = Jenkins.instance.getItemByFullName(jobName)
+if (job != null) {{
+    println "Applying universal bypass fix for job: $jobName"
+    job.setDefinition(new CpsFlowDefinition(newCode, true))
+    job.save()
+    println "Fix applied successfully via Groovy."
+}} else {{
+    println "Error: Job $jobName not found."
+}}
+"""
+                                if CICollector.run_jenkins_script(bypass_script):
+                                    execution_status = "Fix Applied (Universal Bypass)"
+                                    is_safe_to_run = True
+                                    retry_status = "Git Push failed, but fix was applied directly to Jenkins via Groovy script."
+                                else:
+                                    retry_status = f"Git Push Error: {git_err}. Also failed to apply Groovy fallback."
+                            else:
+                                retry_status = f"Git Push Error: {git_err or 'Check permissions/remote.'}"
                             
                     except Exception as e:
                         file_fix_status = f"Failed to fix file: {str(e)}"
@@ -600,20 +693,26 @@ class AutoFixer:
 
         # 2. Safety Check & Command Execution (Medium Priority)
         if not is_safe_to_run and auto_fix_command:
-            # Special case for Jenkins Groovy scripts
-            is_groovy = auto_fix_command.strip().startswith("import ") or "Jenkins.getInstance()" in auto_fix_command
+            # [IMPROVED] Detect Jenkins-specific Groovy even if platform detection was imprecise
+            is_groovy = any(marker in auto_fix_command for marker in [
+                "import org.jenkinsci.plugins.workflow", "Jenkins.getInstance()", "Jenkins.instance", 
+                "def job =", "def pipeline =", ".getItemByFullName(",
+                "job.getDefinition()", "job.save()", "WorkflowJob", "CpsFlowDefinition"
+            ]) or auto_fix_command.strip().startswith("def ")
             
-            if is_groovy and source == "Jenkins":
+            # Allow Groovy scripts if it's Jenkins OR if it's Unknown but looks strongly like Jenkins Groovy
+            if is_groovy and (source == "Jenkins" or source == "Unknown"):
                 print(f"[AUTO-REMEDIATION] Jenkins Groovy script detected. Executing via Script Console...")
                 with open(self.REMEDIATION_LOG, "a") as f: f.write(f"\n[FIXER] Executing Groovy script...")
                 if CICollector.run_jenkins_script(auto_fix_command):
                     execution_status = "Fix Applied Successfully"
                     is_safe_to_run = True
                     target_job = job_id or "unknown-job"
-                    CICollector.trigger_retry(source, target_job)
-                    retry_status = f"Groovy Script Applied & Retrying ({target_job})"
+                    retry_status = f"Groovy Script Applied (Direct Bypass) for {target_job}"
                 else:
-                    execution_status = "Fix Failed"
+                    # Only overwrite if we don't have a better status
+                    if execution_status in ["Manual Fix Required", "N/A"]:
+                        execution_status = "Fix Failed"
                     retry_status = "Script Error"
             else:
                 print(f"[DEBUG] Evaluating safety of: {auto_fix_command}")
@@ -629,15 +728,17 @@ class AutoFixer:
                     if success:
                         execution_status = "Fix Applied Successfully"
                         target_job = job_id or "unknown-job"
-                        CICollector.trigger_retry(source, target_job)
-                        retry_status = f"Command Executed & Retrying ({target_job})"
-                        print(f"[AUTO-REMEDIATION] Success. Triggering {source} retry...")
+                        retry_status = f"Command Executed for {target_job}"
+                        print(f"[AUTO-REMEDIATION] Success. Command remediation completed.")
                     else:
-                        execution_status = "Fix Failed"
+                        if execution_status in ["Manual Fix Required", "N/A"]:
+                            execution_status = "Fix Failed"
                         retry_status = "Retry Aborted"
                 else:
                     print(f"[DEBUG] Command rejected based on restriction: {reason}")
-                    execution_status = "Manual Fix Required"
+                    # CRITICAL FIX: Don't overwrite if we already have a partial success (e.g. Local Fix OK)
+                    if execution_status in ["Manual Fix Required", "N/A"]:
+                        execution_status = "Manual Fix Required"
 
         # 3. Specialized Cloud Platform Healing (Simulation/Fallback)
         # If no direct fix worked, check if it's a known platform issue we can "Self-Heal" via simulation
@@ -652,24 +753,28 @@ class AutoFixer:
                 execution_status = "Fix Applied Successfully"
                 is_safe_to_run = True
                 target_job = job_id or "unknown-job"
-                if CICollector.trigger_retry(source, target_job):
-                    retry_status = f"{source} Self-Healed: Tool Config Updated & Retrying ({target_job})"
-                else:
-                    retry_status = "Healing Complete but Retry Failed"
+                retry_status = f"{source} Self-Healed: Tool Config Updated for {target_job}"
+        
+        # 3. Handle No-Fix/Success Case (User specifically requested re-run via Pull/Analyze)
+        if not is_safe_to_run and not auto_fix_command:
+            print(f"[FIXER] No repair action required for {job_id}.")
+            target_job = job_id or "unknown-job"
+            execution_status = "No Fix Needed (Success)"
+            retry_status = "Build retry will be triggered."
         
         # 4. Final Aggregation & Detailed Logging
         results = {
             "category": str(analysis.get("category", "Unknown")),
-            "detected_tool": str(analysis.get("tool", "Unknown")),
+            "detected_tool": str(analysis.get("tool", "Unknown")) if isinstance(analysis.get("tool"), (str, list)) else "Unknown",
             "root_cause": str(analysis.get("root_cause", "Unknown cause")),
-            "auto_fix_available": is_safe_to_run,
-            "auto_fix_command": auto_fix_command if is_safe_to_run else "",
-            "manual_fix_steps": manual_fix_steps,
-            "confidence_score": analysis.get("confidence", 0.9),
-            "analysis_source": analysis.get("analysis_source", "AI Engine (Azure OpenAI)"),
-            "execution_status": execution_status,
-            "retry_status": retry_status,
-            "pipeline_source": source,
+            "auto_fix_available": bool(is_safe_to_run),
+            "auto_fix_command": str(auto_fix_command) if is_safe_to_run else "",
+            "manual_fix_steps": str(manual_fix_steps),
+            "confidence_score": float(analysis.get("confidence", 0.9)),
+            "analysis_source": str(analysis.get("analysis_source", "AI Engine (Azure OpenAI)")),
+            "execution_status": str(execution_status),
+            "retry_status": str(retry_status),
+            "pipeline_source": str(source),
             "highlighted_lines": analysis.get("highlighted_lines", [])
         }
         
@@ -679,32 +784,37 @@ class AutoFixer:
             
         return results
 
-    def git_commit_and_push(self, file_path: str, message: str) -> bool:
-        """Commits changes to Git and pushes to the origin repository."""
+    def git_commit_and_push(self, file_path: str, message: str) -> tuple:
+        """Commits changes to Git and pushes to the origin repository. Returns (success, error_msg)."""
         try:
-            print(f"[GIT] Committing {file_path}...")
+            # Detect current branch automatically
+            branch_proc = subprocess.run("git rev-parse --abbrev-ref HEAD", shell=True, capture_output=True, text=True)
+            branch = branch_proc.stdout.strip() or "main"
+            
+            print(f"[GIT] Committing {file_path} on branch {branch}...")
             # Commands to stage, commit, and push
             commands = [
                 f"git add {file_path}",
                 f'git commit -m "{message}"',
-                "git push origin main" # Assuming main, can be parameterized
+                f"git push origin {branch}"
             ]
             
             # Using shell=True for git commands on Windows usually works better
             for cmd in commands:
                 proc = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
                 if proc.returncode != 0:
-                    print(f"[GIT ERROR] {cmd} failed: {proc.stderr}")
+                    err = proc.stderr.strip() or proc.stdout.strip()
+                    print(f"[GIT ERROR] {cmd} failed: {err}")
                     # Special check: If there's nothing to commit, it's technically fine
-                    if "nothing to commit" in proc.stdout or "nothing to commit" in proc.stderr:
+                    if "nothing to commit" in err.lower():
                         continue
-                    return False
+                    return False, err
             
             print(f"[GIT] Successfully pushed fix to origin.")
-            return True
+            return True, None
         except Exception as e:
             print(f"[GIT EXCEPTION] {e}")
-            return False
+            return False, str(e)
 
 
 class PackageCorrector:
@@ -793,7 +903,17 @@ class LogAnalyzer:
             except Exception as e:
                 print(f"[ERROR] Failed to initialize Azure OpenAI client: {e}")
 
-    def analyze(self, log_text: str) -> Dict:
+    def _detect_platform(self, log_text: str) -> str:
+        """Heuristically detects the CI/CD platform from the log text."""
+        # [IMPROVED] More robust markers for Jenkins
+        jenkins_markers = ["Jenkins", "[Pipeline]", "org.codehaus.groovy", "WorkflowScript", "hudson.model", "jenkins.model"]
+        if any(m in log_text for m in jenkins_markers): return "Jenkins"
+        elif "GitHub Actions" in log_text or "actions/run" in log_text: return "GitHub Actions"
+        elif "gitlab-runner" in log_text: return "GitLab CI"
+        elif "ArgoCD" in log_text or "kube-system" in log_text: return "ArgoCD"
+        return "Unknown"
+
+    def analyze(self, log_text: str, job_id: str = "unknown-job") -> Dict:
         """Performed 100% using AI Engine (Azure OpenAI) with Platform Detection."""
         import hashlib
 
@@ -801,25 +921,20 @@ class LogAnalyzer:
         if not log_text:
             return self._fallback_result("")
 
-        # Platform Detection Heuristic
-        source = "Unknown"
-        if "Jenkins" in log_text or "[Pipeline]" in log_text: source = "Jenkins"
-        elif "GitHub Actions" in log_text or "actions/run" in log_text: source = "GitHub Actions"
-        elif "gitlab-runner" in log_text: source = "GitLab CI"
-        elif "ArgoCD" in log_text or "kube-system" in log_text: source = "ArgoCD"
-
-        text_hash = hashlib.md5(log_text.encode()).hexdigest()
+        source = self._detect_platform(log_text)
+        
+        # Security/Accuracy Fix: Include job_id in cache key to prevent cross-job contamination
+        text_hash = hashlib.md5(f"{job_id}:{log_text}".encode()).hexdigest()
         if text_hash in self.rules_cache:
-            print("[PIPELINE-LOG] Cache HIT. Returning previous AI analysis.")
+            print(f"[PIPELINE-LOG] Cache HIT for {job_id}. Returning previous AI analysis.")
             res = self.rules_cache[text_hash]
             res["pipeline_source"] = source
             return res
-
-        # Azure OpenAI Analysis
-        print("[PIPELINE-LOG] Consulting Azure OpenAI...")
+            
+        print(f"[PIPELINE-LOG] AI Analyzing failure for job: {job_id}...")
         try:
-            ai_data = self.analyze_log_with_ai(log_text)
-            print("[PIPELINE-LOG] AI Analysis successful.")
+            ai_data = self.analyze_log_with_ai(log_text, job_id)
+            print(f"[PIPELINE-LOG] AI Analysis successful for {job_id}.")
             res = self._map_ai_to_result(ai_data, log_text)
             res["pipeline_source"] = source
             self.rules_cache[text_hash] = res
@@ -831,33 +946,41 @@ class LogAnalyzer:
             res["root_cause"] = f"AI analysis failed: {str(e)}"
             return res
 
-    def analyze_log_with_ai(self, log_text: str) -> Dict:
+    def analyze_log_with_ai(self, log_text: str, job_id: str = "unknown") -> Dict:
         """Sends log to Azure OpenAI and parses structured JSON."""
         if not self.client:
             raise Exception("Azure OpenAI client is not configured. Check environment variables.")
-
+            
         # Truncate log to avoid token limits
         snippet = log_text[-6000:] if len(log_text) > 6000 else log_text
 
         prompt = (
             "You are an expert DevOps SRE AI specialized in autonomous CI/CD remediation.\n"
+            f"Currently analyzing failure for JENKINS JOB: '{job_id}'\n"
             "Analyze the pipeline log and provide a high-confidence JSON remediation plan.\n"
             "### GOAL: Identify the root cause and provide a fix that will restore the Jenkins build to SUCCESS.\n"
             "\n"
-            "### STRATEGIES:\n"
-            "1. REMOTE REMEDIATION (Groovy): If it's a Jenkins tool/plugin/config issue, use 'auto_fix_command' with a Groovy script.\n"
-            "2. LOCAL PROJECT REMEDIATION (File Correction): If it's a code/dependency issue (e.g. npm ERR! 404), use 'file_correction'.\n"
-            "3. LOCAL SHELL REMEDIATION (Commands): If a local command (like 'pip install') can fix the environment, use 'auto_fix_command'.\n"
+            "### REMEDIATION STRATEGIES (PRIORITY ORDER):\n"
+            f"1. JENKINS SCM-BYPASS (High Priority): Since this is for job '{job_id}', if Git access is denied, use 'auto_fix_command' with a Groovy script to convert the job to 'Inline Pipeline' to apply the fix immediately. \n"
+            "   Example Script: \n"
+            "   import org.jenkinsci.plugins.workflow.job.WorkflowJob;\n"
+            "   import org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition;\n"
+            f"   def job = Jenkins.instance.getItemByFullName('{job_id}');\n"
+            "   def fixedScript = '''pipeline { ... fixed code ... }''';\n"
+            "   job.setDefinition(new CpsFlowDefinition(fixedScript, true));\n"
+            "   job.save();\n"
+            "\n"
+            "2. LOCAL PROJECT REMEDIATION (File Correction): For code/dependency issues, use 'file_correction' with the relative path and full new content.\n"
             "\n"
             "### Mandatory JSON Schema:\n"
             "{\n"
-            "  \"problem_category\": \"string (e.g. Build Failure, Dependency Issue, Secret Exposure)\",\n"
-            "  \"detected_tool\": \"string (e.g. Maven, Node.js, Jenkins)\",\n"
-            "  \"root_cause\": \"A detailed technical explanation of what went wrong\",\n"
-            "  \"auto_fix_command\": \"A shell command or Jenkins Groovy script to fix the issue\",\n"
-            "  \"manual_fix_steps\": \"A step-by-step guide for a human if automation fails\",\n"
+            "  \"problem_category\": \"string (e.g. Build Failure, Dependency Error)\",\n"
+            "  \"detected_tool\": \"string (e.g. Maven, Jenkins)\",\n"
+            "  \"root_cause\": \"Technical explanation\",\n"
+            "  \"auto_fix_command\": \"Shell command OR robust Jenkins Groovy script\",\n"
+            "  \"manual_fix_steps\": \"Human guide if automation fails\",\n"
             "  \"confidence_score\": 0.95,\n"
-            "  \"file_correction\": {\"file_path\": \"string (relative to project root)\", \"new_content\": \"full corrected file content\"}\n"
+            "  \"file_correction\": {\"file_path\": \"string\", \"new_content\": \"string\"}\n"
             "}\n"
         )
 
@@ -865,7 +988,7 @@ class LogAnalyzer:
             model=self.deployment_name,
             messages=[
                 {"role": "system", "content": prompt},
-                {"role": "user", "content": f"PIPELINE LOG:\n{snippet}"}
+                {"role": "user", "content": f"PIPELINE LOG for {job_id}:\n{snippet}"}
             ],
             response_format={"type": "json_object"},
             temperature=0.1
@@ -903,7 +1026,7 @@ class LogAnalyzer:
             category_val = str(category_val)
             
         return {
-            "category": ai_data.get("problem_category", "AI Identified Issue"),
+            "category": category_val,
             "tool": tool_val,
             "root_cause": ai_data.get("root_cause", "Analysis incomplete."),
             "suggested_fix": f"AI Suggestion: {fix_cmd}" if fix_cmd else "Review logs manually.",

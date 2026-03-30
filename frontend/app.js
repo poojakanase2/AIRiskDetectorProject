@@ -517,6 +517,9 @@ async function loadConfiguration() {
         document.getElementById('threshold-val').innerText = config.risk_threshold.toFixed(2);
         document.getElementById('canary-steps-input').value = config.canary_steps.join(', ');
         document.getElementById('step-delay-input').value = config.step_delay_ms;
+        
+        // Also load Jenkins config
+        await loadJenkinsConfig();
     } catch (err) {
         console.warn('Failed to load config:', err);
     }
@@ -849,11 +852,19 @@ async function autoFixPipeline() {
     document.getElementById('autofix-execution-status').style.color = "white";
     document.getElementById('autofix-retry-status').innerText = "--";
 
+    const jobName = document.getElementById('jenkins-job-name').value;
+
+    console.log(`[AUTONOMOUS] Triggering Auto-Fix for job: ${jobName || 'manual'}`);
+
     try {
         const response = await fetch('/api/autofix', {
             method: 'POST',
+            cache: 'no-store', // Aggressive no-cache
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ log_text: logText })
+            body: JSON.stringify({ 
+                log_text: logText,
+                job_id: jobName
+            })
         });
 
         if (!response.ok) throw new Error("Failed to auto fix log");
@@ -899,3 +910,101 @@ setInterval(fetchMonitoringStats, 5000);
 updateDashboard();
 updateHistory();
 fetchMonitoringStats();
+
+// Jenkins Connection Functions
+async function testJenkinsConnection() {
+    const url = document.getElementById('jenkins-url-input').value;
+    const user = document.getElementById('jenkins-user-input').value;
+    const token = document.getElementById('jenkins-token-input').value;
+
+    if (!url || !user || !token) {
+        alert("Please fill in all Jenkins connection fields.");
+        return;
+    }
+
+    const btn = document.querySelector('button[onclick="testJenkinsConnection()"]');
+    const originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="pulse" data-lucide="refresh-cw"></i> Testing...';
+    lucide.createIcons();
+
+    try {
+        const response = await fetch('/api/jenkins/test', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url, user, token })
+        });
+        const result = await response.json();
+        
+        const indicator = document.getElementById('jenkins-connection-indicator');
+        if (result.success) {
+            indicator.innerText = "Verified";
+            indicator.className = "status-badge status-healthy";
+            indicator.style.color = "var(--success-neon)";
+            logIncident('HEALTHY', 'Jenkins connection verified successfully.');
+        } else {
+            indicator.innerText = "Failed";
+            indicator.className = "status-badge status-critical";
+            indicator.style.color = "var(--danger-neon)";
+            alert(`Connection Failed: ${result.message}`);
+        }
+    } catch (err) {
+        alert("Failed to reach the backend to test connection.");
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+        lucide.createIcons();
+    }
+}
+
+async function saveJenkinsConfig() {
+    const url = document.getElementById('jenkins-url-input').value;
+    const user = document.getElementById('jenkins-user-input').value;
+    const token = document.getElementById('jenkins-token-input').value;
+
+    try {
+        const response = await fetch('/api/jenkins/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url, user, token })
+        });
+        
+        if (response.ok) {
+            logIncident('HEALTHY', 'Jenkins credentials updated in memory.');
+            const btn = document.querySelector('button[onclick="saveJenkinsConfig()"]');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<i data-lucide="check" style="width: 14px;"></i> Saved!';
+            btn.style.background = "var(--success-neon)";
+            btn.style.color = "black";
+            lucide.createIcons();
+            
+            setTimeout(() => {
+                btn.innerHTML = originalText;
+                btn.style.background = "var(--primary-neon)";
+                btn.style.color = "black";
+                lucide.createIcons();
+            }, 2000);
+        }
+    } catch (err) {
+        console.error('Failed to save Jenkins config:', err);
+    }
+}
+
+async function loadJenkinsConfig() {
+    try {
+        const response = await fetch('/api/jenkins/config');
+        const config = await response.json();
+        if (config) {
+            document.getElementById('jenkins-url-input').value = config.url || '';
+            document.getElementById('jenkins-user-input').value = config.user || '';
+            // We don't populate the token for security reasons, or just show placeholders
+            if (config.token) {
+                document.getElementById('jenkins-token-input').placeholder = "•••••••••••••••• (Saved)";
+                document.getElementById('jenkins-connection-indicator').innerText = "Configured";
+                document.getElementById('jenkins-connection-indicator').className = "status-badge status-warning";
+            }
+        }
+    } catch (err) {
+        console.warn('Failed to load Jenkins config:', err);
+    }
+}
