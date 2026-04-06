@@ -1,0 +1,84 @@
+# GitHub Actions Pipeline for AI Risk Detector Testing
+# This file is intentionally broken with several complex errors.
+
+name: Frontend and Backend CI
+
+on:
+  push:
+    branches: [ "main", "develop" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  NODE_ENV: production
+  # Error 1: Missing secret reference that will cause step failure
+  DB_PASSWORD: ${{ secrets.DATABASE_PASSWORD }}
+
+jobs:
+  # Error 2: Circular Dependency! 
+  # Job 'build-backend' needs 'test-frontend', but 'test-frontend' needs 'build-backend'.
+  build-backend:
+    name: Build and Test Backend
+    runs-on: ubuntu-latest
+    # removed needs to break circular dependency 
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        # Error 3: Non-existent major version of setup-node action
+        uses: actions/setup-node@v99.0.0
+        with:
+          node-version: '18.x'
+
+      - name: Install dependencies
+        # Error 4: Wrong working directory named 'backend' (actual is 'server')
+        working-directory: ./backend
+        run: npm install
+
+      - name: Run Backend Tests
+        working-directory: ./server
+        # Error 5: Windows-specific command executed on Linux runner
+        run: |
+          echo "Starting tests..."
+          dir  # This should be 'ls' on Linux
+          npm test
+
+  test-frontend:
+    name: Test Frontend
+    runs-on: ubuntu-latest
+    # Part 2 of Circular Dependency
+    needs: [build-backend]
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '14' # Error 6: Incompatible node version with Vite (requires 18+)
+
+      - name: Build Frontend
+        id: build_step
+        working-directory: ./client
+        run: |
+          npm install
+          npm run build
+        # Error 7: Continue on error, but subsequent logic assumes success
+        continue-on-error: true
+
+      - name: Deployment Simulation
+        # Error 8: Contradictory logic - runs ONLY if build failed, but expects successful artifact
+        if: failure() && steps.build_step.outcome == 'success'
+        run: |
+          echo "Deploying build artifacts..."
+          # Error 9: Pathing error in find command or env var usage
+          tar -czf build.tar.gz ./dist-missing-folder
+          
+      - name: Cleanup
+        # Error 10: Using PowerShell syntax in a standard bash shell
+        run: |
+          Set-Variable -Name "TEMP_DIR" -Value "/tmp/build"
+          Remove-Item -Path $TEMP_DIR -Recurse -Force
