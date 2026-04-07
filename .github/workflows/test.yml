@@ -1,5 +1,5 @@
 # Corrected GitHub Actions Pipeline
-# Fixes: wrong directory names, wrong runtime for Python backend, wrong dist path
+# Backend: Python/FastAPI | Frontend: Vanilla HTML/CSS/JS (no npm build)
 name: Frontend and Backend CI
 
 on:
@@ -18,13 +18,11 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Python
-        # Backend is FastAPI (Python), NOT Node.js
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
       - name: Install Python dependencies
-        # Correct directory is 'backend', not 'server'
         working-directory: ./backend
         run: |
           python -m pip install --upgrade pip
@@ -37,7 +35,7 @@ jobs:
           python -m pytest --tb=short || echo "No tests configured, skipping."
 
   test-frontend:
-    name: Test and Build Frontend
+    name: Validate Frontend (Static HTML/CSS/JS)
     runs-on: ubuntu-latest
     needs: [build-backend]
 
@@ -45,28 +43,29 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18.x'
-
-      - name: Build Frontend
-        id: build_step
-        # Correct directory is 'frontend', not 'client'
+      - name: Validate Static Frontend Files
+        # Frontend is vanilla HTML/CSS/JS - no npm build needed
         working-directory: ./frontend
         run: |
-          npm install
-          npm run build
+          echo "Validating static frontend files..."
+          echo "--- Files present ---"
+          ls -la
+          # Verify required files exist
+          test -f dashboard.html && echo "✅ dashboard.html found" || (echo "❌ dashboard.html missing" && exit 1)
+          test -f app.js        && echo "✅ app.js found"         || (echo "❌ app.js missing" && exit 1)
+          test -f style.css     && echo "✅ style.css found"      || (echo "❌ style.css missing" && exit 1)
+          echo "All frontend files validated successfully."
 
-      - name: Deployment Simulation
-        if: success() && steps.build_step.outcome == 'success'
-        # Run from ./frontend so ./dist resolves correctly
+      - name: Check HTML Syntax
         working-directory: ./frontend
         run: |
-          echo "Deploying build artifacts..."
-          tar -czf ../build.tar.gz ./dist 2>/dev/null || echo "No dist folder found, skipping archive."
+          # Basic HTML structure check
+          grep -q "<!DOCTYPE html>" dashboard.html && echo "✅ DOCTYPE present" || echo "⚠️ DOCTYPE missing"
+          grep -q "<html" dashboard.html && echo "✅ <html> tag present" || echo "⚠️ <html> tag missing"
+          echo "HTML check complete."
 
       - name: Cleanup
         run: |
           TEMP_DIR="/tmp/build"
           rm -rf "$TEMP_DIR"
+          echo "Cleanup complete."
