@@ -1,0 +1,37 @@
+stages:
+  - test
+  - build
+  - deploy
+
+test-backend:
+  stage: test
+  image: python:3.11
+  script:
+    - cd backend
+    - pip install -r requirements.txt
+    - pytest
+  only:
+    - main
+    - master
+
+build-backend:
+  stage: build
+  image: python:3.11
+  script:
+    - cd backend
+    - pip install -r requirements.txt
+    - python -m compileall .
+  only:
+    - main
+    - master
+
+deploy:
+  stage: deploy
+  image: python:3.11
+  script:
+    - echo "Deploy step here (e.g., upload artifacts, restart service, etc.)"
+  only:
+    - main
+    - master
+
+# Note: No npm/yarn steps are present, as frontend is static and requires no build.
