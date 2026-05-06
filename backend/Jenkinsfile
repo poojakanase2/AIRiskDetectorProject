@@ -1,18 +1,12 @@
 pipeline {
     agent any
 
-    tools {
-        maven 'Maven3'
-        jdk 'Java17'
-    }
-
     environment {
         IMAGE_NAME = "demo-app"
         TAG = "latest"
     }
 
     stages {
-
         stage('Checkout') {
             steps {
                 echo "Fetching code from GitHub..."
