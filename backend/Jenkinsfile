@@ -1,9 +1,36 @@
 pipeline {
     agent any
+    environment {
+        PYTHONPATH = "${WORKSPACE}/backend"
+    }
     stages {
-        stage('Test') {
+        stage('Backend Lint') {
             steps {
-                echo 'Fixed'
+                dir('backend') {
+                    sh 'pip install --upgrade pip && pip install -r requirements.txt'
+                    sh 'python -m flake8 .'
+                }
+            }
+        }
+        stage('Backend Test') {
+            steps {
+                dir('backend') {
+                    sh 'pytest'
+                }
+            }
+        }
+        stage('Frontend Lint') {
+            steps {
+                dir('frontend') {
+                    sh 'find . -name "*.js" -exec js-beautify -d {} +' // optional: add js-beautify or skip if not needed
+                }
+            }
+        }
+        stage('Frontend Smoke Test') {
+            steps {
+                dir('frontend') {
+                    sh 'test -f index.html'
+                }
             }
         }
     }
