@@ -1,23 +1,35 @@
 pipeline {
     agent any
-    environment {
-        JENKINS_URL = 'http://your-jenkins-url'
-        JENKINS_TOKEN = 'your-api-token'
-    }
     stages {
-        stage('Validate Jenkins Config') {
+        stage('Backend Tests') {
             steps {
-                script {
-                    if (!env.JENKINS_URL || !env.JENKINS_TOKEN) {
-                        error('Jenkins URL and Token must be configured.')
-                    }
+                dir('./backend') {
+                    sh 'python -m pytest'
+                }
+            }
+        }
+        stage('Frontend Lint') {
+            steps {
+                dir('./frontend') {
+                    sh 'ls -l'
                 }
             }
         }
         stage('Build') {
             steps {
-                echo 'Building...'
+                sh 'echo "Build step placeholder"'
             }
+        }
+    }
+    post {
+        always {
+            echo 'Pipeline finished.'
+        }
+        success {
+            echo 'SUCCESS!'
+        }
+        failure {
+            echo 'FAILURE!'
         }
     }
 }
