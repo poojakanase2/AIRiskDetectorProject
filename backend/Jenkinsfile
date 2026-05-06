@@ -1,15 +1,53 @@
 pipeline {
     agent any
-
     environment {
-        IMAGE_NAME = "demo-app"
-        TAG = "latest"
+        VENV_DIR = "./backend/venv"
     }
-
     stages {
-        stage('Checkout') {
+        stage('Setup Backend') {
             steps {
-                echo "Fetching code from GitHub..."
+                dir('backend') {
+                    sh '''
+                        python3 -m venv venv
+                        . venv/bin/activate
+                        pip install --upgrade pip
+                        pip install -r requirements.txt
+                    '''
+                }
+            }
+        }
+        stage('Lint Backend') {
+            steps {
+                dir('backend') {
+                    sh '''
+                        . venv/bin/activate
+                        flake8 .
+                    '''
+                }
+            }
+        }
+        stage('Test Backend') {
+            steps {
+                dir('backend') {
+                    sh '''
+                        . venv/bin/activate
+                        pytest
+                    '''
+                }
+            }
+        }
+        stage('Test Frontend') {
+            steps {
+                dir('frontend') {
+                    sh '''
+                        echo "No build needed for vanilla JS. Running basic HTML validation."
+                        if command -v tidy >/dev/null 2>&1; then
+                            for f in *.html; do tidy -e "$f"; done
+                        else
+                            echo "tidy not installed, skipping HTML lint."
+                        fi
+                    '''
+                }
             }
         }
     }
