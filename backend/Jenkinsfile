@@ -1,48 +1,53 @@
 pipeline {
     agent any
+    environment {
+        // Define any environment variables here if needed
+    }
     stages {
-        stage('Backend Lint') {
-            agent {
-                docker {
-                    image 'python:3.10-slim'
-                    args '-u root'
-                }
-            }
+        stage('Checkout') {
             steps {
-                dir('backend') {
-                    sh 'pip install --upgrade pip'
-                    sh 'pip install -r requirements.txt'
-                    sh 'flake8 .'
-                }
+                echo 'Cloning repository...'
+                git credentialsId: 'github-creds', url: 'https://github.com/sample/inventory-app.git'
             }
         }
-        stage('Backend Test') {
-            agent {
-                docker {
-                    image 'python:3.10-slim'
-                    args '-u root'
-                }
-            }
+        stage('Build') {
             steps {
                 dir('backend') {
                     sh 'pip install -r requirements.txt'
                     sh 'pytest'
                 }
-            }
-        }
-        stage('Frontend Lint') {
-            steps {
                 dir('frontend') {
-                    sh 'find . -name "*.js" -exec echo "Linting {}" \;'
+                    sh 'echo "No build needed for vanilla JS frontend"'
                 }
             }
         }
-        stage('Frontend Smoke Test') {
+        stage('Code Scan') {
             steps {
-                dir('frontend') {
-                    sh 'test -f index.html && echo "index.html exists"'
+                dir('backend') {
+                    sh 'pylint app/'
                 }
             }
+        }
+        stage('Docker Build') {
+            steps {
+                dir('backend') {
+                    sh 'docker build -t inventory-backend:latest .'
+                }
+                dir('frontend') {
+                    sh 'docker build -t inventory-frontend:latest .'
+                }
+            }
+        }
+        stage('Deploy') {
+            steps {
+                echo 'Deploying application...'
+                // Add your deployment steps here
+            }
+        }
+    }
+    post {
+        failure {
+            echo 'Pipeline failed'
         }
     }
 }
