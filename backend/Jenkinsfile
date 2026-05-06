@@ -1,33 +1,68 @@
 pipeline {
     agent any
-    environment {
-        PYTHONPATH = "${WORKSPACE}/backend"
+
+    tools {
+        maven 'Maven3'
+        jdk 'Java17'
     }
+
+    environment {
+        IMAGE_NAME = "demo-app"
+        TAG = "latest"
+    }
+
     stages {
-        stage('Backend - Install & Test') {
+
+        stage('Checkout') {
             steps {
-                dir('backend') {
-                    sh '''
-                        python3 -m venv venv
-                        . venv/bin/activate
-                        pip install --upgrade pip
-                        pip install -r requirements.txt
-                        pytest
-                    '''
-                }
+                echo "Fetching code from GitHub..."
+                git branch: 'main', url: 'https://github.com/sample/project.git'
             }
         }
-        stage('Frontend - Lint') {
+
+        stage('Compile') {
             steps {
-                dir('frontend') {
-                    sh '''
-                        # Example: HTMLHint or custom lint, but vanilla HTML/CSS/JS so just check for existence
-                        test -f index.html
-                        test -f style.css || true
-                        test -f script.js || true
-                    '''
-                }
+                echo "Compiling application..."
+                sh 'mvn clean compile'
             }
+        }
+
+        stage('Unit Test') {
+            steps {
+                echo "Executing test cases..."
+                sh 'mvn test'
+            }
+        }
+
+        stage('Docker Build') {
+            steps {
+                echo "Creating Docker image..."
+                sh "docker build -t $IMAGE_NAME:$TAG ."
+            }
+        }
+
+        stage('Push Image') {
+            steps {
+                echo "Pushing image to DockerHub..."
+                sh 'docker push $IMAGE_NAME:$TAG'
+            }
+        }
+
+        stage('Deploy') {
+            steps {
+                echo "Deploying application..."
+                sh "kubectl apply -f deployment.yml"
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "Pipeline completed successfully"
+        }
+        always {
+            echo "Cleaning workspace"
+            cleanWs()
         }
     }
 }
