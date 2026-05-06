@@ -1,48 +1,48 @@
 pipeline {
     agent any
+
+    environment {
+        APP_NAME = "DemoApp"
+        BUILD_ENV = "dev"
+    }
+
     stages {
-        stage('Backend Lint') {
+
+        stage('Checkout') {
             steps {
-                dir('backend') {
-                    sh 'pip install flake8'
-                    sh 'flake8 .'
-                }
+                echo "Cloning repository..."
+                git 'https://github.com/sample/demo.git'
             }
         }
-        stage('Backend Test') {
+
+        stage('Build') {
             steps {
-                dir('backend') {
-                    sh 'pip install -r requirements.txt'
-                    sh 'pytest'
-                }
+                echo "Building application"
+                sh 'mvn clean package'
             }
         }
-        stage('Backend Build') {
+
+        stage('Test') {
             steps {
-                dir('backend') {
-                    sh 'pip install -r requirements.txt'
-                    sh 'python setup.py sdist bdist_wheel || true'
-                }
+                echo "Running tests..."
+                sh 'mvn test'
             }
         }
-        stage('Frontend Lint') {
+
+        stage('Deploy') {
             steps {
-                dir('frontend') {
-                    sh 'echo "No linting required for vanilla JS/HTML/CSS"'
-                }
-            }
-        }
-        stage('Frontend Test') {
-            steps {
-                dir('frontend') {
-                    sh 'echo "No tests defined for vanilla JS/HTML/CSS"'
-                }
+                echo "Deploying application..."
+                sh "scp target/app.jar ubuntu@server:/apps/"
             }
         }
     }
+
     post {
-        always {
-            cleanWs()
+        success {
+            echo "Build Successful"
+        }
+        failure {
+            echo "Build Failed"
         }
     }
 }
