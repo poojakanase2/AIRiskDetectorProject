@@ -2,41 +2,54 @@ pipeline {
     agent any
 
     environment {
-        IMAGE_NAME = "demo-app"
-        TAG = "latest"
+        APP_NAME = "InventoryService"
+        VERSION = "1.0"
     }
 
     stages {
+
         stage('Checkout') {
             steps {
-                echo "Fetching code from GitHub..."
+                echo "Cloning repository..."
+                git url: 'https://github.com/sample/inventory-app.git', branch: 'main'
             }
         }
-        stage('Backend Lint') {
+
+        stage('Build') {
             steps {
-                dir('backend') {
-                    sh 'pip install flake8 && flake8 .'
-                }
+                echo "Building Maven project..."
+                sh 'mvn clean install'
             }
         }
-        stage('Backend Test') {
+
+        stage('Code Scan') {
             steps {
-                dir('backend') {
-                    sh 'pip install -r requirements.txt && pytest'
-                }
+                echo "Running SonarQube scan..."
+                sh 'mvn sonar:sonar'
             }
         }
-        stage('Frontend Lint') {
+
+        stage('Docker Build') {
             steps {
-                dir('frontend') {
-                    sh 'find . -name "*.js" -exec echo "Linting {}" \;'
-                }
+                echo "Building Docker image..."
+                sh 'docker build -t inventory-app:v1 .'
             }
         }
-        stage('Build Docker Image') {
+
+        stage('Deploy') {
             steps {
-                sh 'docker build -t $IMAGE_NAME:$TAG .'
+                echo "Deploying application..."
+                sh 'kubectl apply -f deployment.yaml'
             }
+        }
+    }
+
+    post {
+        success {
+            echo "Pipeline executed successfully"
+        }
+        failure {
+            echo "Pipeline failed"
         }
     }
 }
