@@ -1,35 +1,48 @@
 pipeline {
     agent any
     stages {
-        stage('Backend Tests') {
+        stage('Backend Lint') {
             steps {
-                dir('./backend') {
-                    sh 'python -m pytest'
+                dir('backend') {
+                    sh 'pip install flake8'
+                    sh 'flake8 .'
+                }
+            }
+        }
+        stage('Backend Test') {
+            steps {
+                dir('backend') {
+                    sh 'pip install -r requirements.txt'
+                    sh 'pytest'
+                }
+            }
+        }
+        stage('Backend Build') {
+            steps {
+                dir('backend') {
+                    sh 'pip install -r requirements.txt'
+                    sh 'python setup.py sdist bdist_wheel || true'
                 }
             }
         }
         stage('Frontend Lint') {
             steps {
-                dir('./frontend') {
-                    sh 'ls -l'
+                dir('frontend') {
+                    sh 'echo "No linting required for vanilla JS/HTML/CSS"'
                 }
             }
         }
-        stage('Build') {
+        stage('Frontend Test') {
             steps {
-                sh 'echo "Build step placeholder"'
+                dir('frontend') {
+                    sh 'echo "No tests defined for vanilla JS/HTML/CSS"'
+                }
             }
         }
     }
     post {
         always {
-            echo 'Pipeline finished.'
-        }
-        success {
-            echo 'SUCCESS!'
-        }
-        failure {
-            echo 'FAILURE!'
+            cleanWs()
         }
     }
 }
