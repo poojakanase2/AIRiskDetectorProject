@@ -17,15 +17,19 @@ pipeline {
 
         stage('Build') {
             steps {
-                echo "Building Maven project..."
-                sh 'mvn clean install'
+                dir('./backend') {
+                    echo "Building Maven project..."
+                    sh 'mvn clean install'
+                }
             }
         }
 
         stage('Code Scan') {
             steps {
-                echo "Running SonarQube scan..."
-                sh 'mvn sonar:sonar'
+                dir('./backend') {
+                    echo "Running SonarQube scan..."
+                    sh 'mvn sonar:sonar'
+                }
             }
         }
 
