@@ -1,48 +1,33 @@
 pipeline {
     agent any
-
     environment {
-        APP_NAME = "DemoApp"
-        BUILD_ENV = "dev"
+        PYTHONPATH = "${WORKSPACE}/backend"
     }
-
     stages {
-
-        stage('Checkout') {
+        stage('Backend - Install & Test') {
             steps {
-                echo "Cloning repository..."
-                git 'https://github.com/sample/demo.git'
+                dir('backend') {
+                    sh '''
+                        python3 -m venv venv
+                        . venv/bin/activate
+                        pip install --upgrade pip
+                        pip install -r requirements.txt
+                        pytest
+                    '''
+                }
             }
         }
-
-        stage('Build') {
+        stage('Frontend - Lint') {
             steps {
-                echo "Building application"
-                sh 'mvn clean package'
+                dir('frontend') {
+                    sh '''
+                        # Example: HTMLHint or custom lint, but vanilla HTML/CSS/JS so just check for existence
+                        test -f index.html
+                        test -f style.css || true
+                        test -f script.js || true
+                    '''
+                }
             }
-        }
-
-        stage('Test') {
-            steps {
-                echo "Running tests..."
-                sh 'mvn test'
-            }
-        }
-
-        stage('Deploy') {
-            steps {
-                echo "Deploying application..."
-                sh "scp target/app.jar ubuntu@server:/apps/"
-            }
-        }
-    }
-
-    post {
-        success {
-            echo "Build Successful"
-        }
-        failure {
-            echo "Build Failed"
         }
     }
 }
