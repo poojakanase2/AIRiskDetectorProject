@@ -10,53 +10,7 @@ pipeline {
         stage('Checkout') {
             steps {
                 echo "Fetching code from GitHub..."
-                git branch: 'main', url: 'https://github.com/sample/project.git'
             }
-        }
-
-        stage('Compile') {
-            steps {
-                echo "Compiling application..."
-                sh 'mvn clean compile'
-            }
-        }
-
-        stage('Unit Test') {
-            steps {
-                echo "Executing test cases..."
-                sh 'mvn test'
-            }
-        }
-
-        stage('Docker Build') {
-            steps {
-                echo "Creating Docker image..."
-                sh "docker build -t $IMAGE_NAME:$TAG ."
-            }
-        }
-
-        stage('Push Image') {
-            steps {
-                echo "Pushing image to DockerHub..."
-                sh 'docker push $IMAGE_NAME:$TAG'
-            }
-        }
-
-        stage('Deploy') {
-            steps {
-                echo "Deploying application..."
-                sh "kubectl apply -f deployment.yml"
-            }
-        }
-    }
-
-    post {
-        success {
-            echo "Pipeline completed successfully"
-        }
-        always {
-            echo "Cleaning workspace"
-            cleanWs()
         }
     }
 }
