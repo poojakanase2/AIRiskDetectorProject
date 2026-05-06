@@ -1,15 +1,9 @@
 pipeline {
     agent any
-
-    environment {
-        IMAGE_NAME = "demo-app"
-        TAG = "latest"
-    }
-
     stages {
-        stage('Checkout') {
+        stage('Test') {
             steps {
-                echo "Fetching code from GitHub..."
+                echo 'Fixed'
             }
         }
     }
