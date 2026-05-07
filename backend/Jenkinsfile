@@ -1,14 +1,56 @@
 pipeline {
     agent any
-    tools {
-        maven 'maven'
+
+    environment {
+        APP_NAME = "InventoryService"
+        VERSION = "1.0"
+        MVN_PATH = "/var/lib/jenkins/tools/hudson.tasks.Maven_MavenInstallation/maven/bin/mvn"
     }
+
     stages {
-        stage('Build') {
+        stage('Checkout') {
             steps {
-                sh 'mvn clean install'
+                echo "Cloning repository..."
+                git url: 'https://github.com/poojakanase2/AIRiskDetectorProject.git',
+                    branch: 'main'
             }
         }
-        // ... (preserve all other original stages, logic, and shell commands exactly as in the original Jenkinsfile)
+
+        stage('Build') {
+            steps {
+                echo "Building Maven project..."
+                sh "${env.MVN_PATH} clean install"
+            }
+        }
+
+        stage('Code Scan') {
+            steps {
+                echo "Running SonarQube scan..."
+                sh "${env.MVN_PATH} sonar:sonar"
+            }
+        }
+
+        stage('Docker Build') {
+            steps {
+                echo "Building Docker image..."
+                sh 'docker build -t inventory-app:v1 .'
+            }
+        }
+
+        stage('Deploy') {
+            steps {
+                echo "Deploying application..."
+                sh 'kubectl apply -f deployment.yaml'
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "Pipeline executed successfully"
+        }
+        failure {
+            echo "Pipeline failed"
+        }
     }
 }
