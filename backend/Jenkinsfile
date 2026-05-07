@@ -1,8 +1,5 @@
 pipeline {
     agent any
-    environment {
-        // Add any required environment variables here
-    }
     stages {
         stage('Backend Lint') {
             steps {
