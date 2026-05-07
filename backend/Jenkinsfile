@@ -1,8 +1,6 @@
 pipeline {
     agent any
-    tools {
-        maven 'Maven' // Use the default Maven tool name configured in Jenkins Global Tools
-    }
+    // Removed tools block as no Maven installation named 'Maven' is configured
     stages {
         stage('Build') {
             steps {
