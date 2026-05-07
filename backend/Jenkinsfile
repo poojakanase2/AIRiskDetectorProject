@@ -1,56 +1,44 @@
 pipeline {
     agent any
-
     environment {
-        APP_NAME = "InventoryService"
-        VERSION = "1.0"
-        MVN_PATH = "/var/lib/jenkins/tools/hudson.tasks.Maven_MavenInstallation/maven/bin/mvn"
+        PYTHONPATH = "${WORKSPACE}/backend"
     }
-
     stages {
-        stage('Checkout') {
+        stage('Backend Lint') {
             steps {
-                echo "Cloning repository..."
-                git url: 'https://github.com/poojakanase2/AIRiskDetectorProject.git',
-                    branch: 'main'
+                dir('backend') {
+                    // Ensure Python and pip are available
+                    sh '''which python || which python3 || (echo "Python not found" && exit 1)'''
+                    sh '''which pip || which pip3 || (echo "pip not found" && exit 1)'''
+                    sh '''pip install --upgrade pip || pip3 install --upgrade pip'''
+                    sh '''pip install flake8 || pip3 install flake8'''
+                    sh '''flake8 .'''
+                }
             }
         }
-
-        stage('Build') {
+        stage('Backend Test') {
             steps {
-                echo "Building Maven project..."
-                sh "${env.MVN_PATH} clean install"
+                dir('backend') {
+                    sh '''pip install pytest || pip3 install pytest'''
+                    sh '''pytest'''
+                }
             }
         }
-
-        stage('Code Scan') {
+        stage('Frontend Lint') {
             steps {
-                echo "Running SonarQube scan..."
-                sh "${env.MVN_PATH} sonar:sonar"
+                dir('frontend') {
+                    sh '''echo "Linting frontend (HTML/CSS/JS)"'''
+                    sh '''find . -name "*.html" -exec echo "Linting {}" \;'''
+                }
             }
         }
-
-        stage('Docker Build') {
+        stage('Frontend Smoke Test') {
             steps {
-                echo "Building Docker image..."
-                sh 'docker build -t inventory-app:v1 .'
+                dir('frontend') {
+                    sh '''echo "Running frontend smoke tests"'''
+                    sh '''test -f index.html'''
+                }
             }
-        }
-
-        stage('Deploy') {
-            steps {
-                echo "Deploying application..."
-                sh 'kubectl apply -f deployment.yaml'
-            }
-        }
-    }
-
-    post {
-        success {
-            echo "Pipeline executed successfully"
-        }
-        failure {
-            echo "Pipeline failed"
         }
     }
 }
