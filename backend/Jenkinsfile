@@ -1,38 +1,61 @@
 pipeline {
     agent any
+
     environment {
-        // Preserve original environment variables if any
+        APP_NAME = "InventoryService"
+        VERSION = "1.0"
     }
+
     stages {
-        stage('Backend Lint') {
+
+        stage('Checkout') {
             steps {
-                dir('backend') {
-                    sh '''python3 -m pip --version || (curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py && python3 get-pip.py --user && python3 -m pip install --upgrade pip)'''
-                    sh 'python3 -m pip install --upgrade pip'
-                    // Add original lint command here, e.g., flake8 or pylint
-                }
+                echo "Cloning repository..."
+
+                git url: 'https://github.com/poojakanase2/AIRiskDetectorProject.git',
+                    branch: 'main'
             }
         }
-        stage('Backend Test') {
+
+        stage('Build') {
             steps {
-                dir('backend') {
-                    // Preserve original test command, e.g., pytest
-                }
+                echo "Building Maven project..."
+
+                sh 'mvn clean install'
             }
         }
-        stage('Frontend Lint') {
+
+        stage('Code Scan') {
             steps {
-                dir('frontend') {
-                    // Preserve original frontend lint command
-                }
+                echo "Running SonarQube scan..."
+
+                sh "mvn sonar:sonar"
             }
         }
-        stage('Frontend Smoke Test') {
+
+        stage('Docker Build') {
             steps {
-                dir('frontend') {
-                    // Preserve original frontend smoke test command
-                }
+                echo "Building Docker image..."
+
+                sh 'docker build -t inventory-app:v1 .'
             }
+        }
+
+        stage('Deploy') {
+            steps {
+                echo "Deploying application..."
+
+                sh 'kubectl apply -f deployment.yaml'
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "Pipeline executed successfully"
+        }
+        failure {
+            echo "Pipeline failed"
         }
     }
 }
