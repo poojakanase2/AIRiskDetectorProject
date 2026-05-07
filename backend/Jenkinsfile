@@ -1,7 +1,7 @@
 pipeline {
     agent any
     tools {
-        maven 'Maven 3.8.1' // Replace with the Maven version name configured in Jenkins Global Tool Configuration
+        maven 'maven' // Use the default Maven tool name configured in Jenkins
     }
     stages {
         stage('Build') {
