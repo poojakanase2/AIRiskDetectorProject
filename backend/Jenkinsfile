@@ -3,7 +3,7 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                git url: 'https://github.com/poojakanase2/AIRiskDetectorProject.git'
+                git url: 'https://github.com/poojakanase2/AIRiskDetectorProject.git', branch: 'main'
             }
         }
         stage('Backend Build') {
@@ -23,15 +23,13 @@ pipeline {
         stage('Frontend Test') {
             steps {
                 dir('frontend') {
-                    sh 'echo "No frontend build needed; running static checks"'
-                    sh 'ls -l'
+                    sh 'echo "No frontend build step required"'
                 }
             }
         }
         stage('Deploy') {
             steps {
-                echo 'Deploying application...'
-                // Add your deploy logic here
+                sh 'echo "Deploying application..."'
             }
         }
     }
