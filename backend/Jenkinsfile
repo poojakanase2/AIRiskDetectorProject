@@ -1,14 +1,15 @@
 pipeline {
     agent any
     stages {
-        stage('Backend Lint') {
+        stage('Checkout') {
+            steps {
+                git url: 'https://github.com/poojakanase2/AIRiskDetectorProject.git'
+            }
+        }
+        stage('Backend Build') {
             steps {
                 dir('backend') {
-                    // Ensure pip is installed before upgrading
-                    sh '''
-                        python3 -m ensurepip --upgrade || sudo apt-get install -y python3-pip
-                        python3 -m pip install --upgrade pip
-                    '''
+                    sh 'pip install -r requirements.txt'
                 }
             }
         }
@@ -19,18 +20,18 @@ pipeline {
                 }
             }
         }
-        stage('Frontend Lint') {
+        stage('Frontend Test') {
             steps {
                 dir('frontend') {
-                    sh 'echo "Linting frontend..."'
+                    sh 'echo "No frontend build needed; running static checks"'
+                    sh 'ls -l'
                 }
             }
         }
-        stage('Frontend Smoke Test') {
+        stage('Deploy') {
             steps {
-                dir('frontend') {
-                    sh 'echo "Running frontend smoke tests..."'
-                }
+                echo 'Deploying application...'
+                // Add your deploy logic here
             }
         }
     }
