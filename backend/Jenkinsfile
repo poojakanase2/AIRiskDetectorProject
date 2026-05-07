@@ -1,11 +1,14 @@
 pipeline {
     agent any
+    tools {
+        maven 'Maven 3.8.1' // Replace with the Maven version name configured in Jenkins Global Tool Configuration
+    }
     stages {
         stage('Build') {
             steps {
                 sh 'mvn clean install'
             }
         }
-        // Preserve all other original stages, logic, variables, and shell commands here
+        // ... (preserve all other original stages, logic, and shell commands exactly as in the original Jenkinsfile)
     }
 }
