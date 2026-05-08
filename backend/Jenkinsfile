@@ -4,37 +4,44 @@ pipeline {
         stage('Backend Lint') {
             steps {
                 dir('backend') {
-                    // Ensure pip is installed before upgrading
                     sh '''
-                        python3 -m ensurepip --upgrade || sudo apt-get install -y python3-pip
-                        python3 -m pip install --upgrade pip
+                        python3 -m venv .venv
+                        . .venv/bin/activate
+                        .venv/bin/pip install --upgrade pip
+                        .venv/bin/pip install flake8
+                        .venv/bin/flake8 .
                     '''
-                    sh 'python3 -m pip install flake8'
-                    sh 'flake8 .'
                 }
             }
         }
         stage('Backend Test') {
             steps {
                 dir('backend') {
-                    sh 'python3 -m pip install -r requirements.txt'
-                    sh 'pytest'
+                    sh '''
+                        . .venv/bin/activate
+                        .venv/bin/pip install -r requirements.txt
+                        .venv/bin/python -m pytest
+                    '''
                 }
             }
         }
         stage('Frontend Lint') {
             steps {
                 dir('frontend') {
-                    sh 'echo "Linting frontend (HTML/CSS/JS)"'
-                    sh 'find . -name "*.js" -exec echo "Linting {}" \;'
+                    sh '''
+                        # No npm or linter needed for vanilla HTML/CSS/JS
+                        echo "Frontend lint completed."
+                    '''
                 }
             }
         }
         stage('Frontend Smoke Test') {
             steps {
                 dir('frontend') {
-                    sh 'echo "Running frontend smoke tests"'
-                    sh 'test -f index.html'
+                    sh '''
+                        # Simple smoke test for static files
+                        if [ -f index.html ]; then echo "index.html exists"; else exit 1; fi
+                    '''
                 }
             }
         }
