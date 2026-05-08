@@ -3,7 +3,7 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                git url: 'https://github.com/poojakanase2/AIRiskDetectorProject.git'
+                git url: 'https://github.com/poojakanase2/AIRiskDetectorProject.git', branch: 'main'
             }
         }
         stage('Backend Test') {
@@ -24,12 +24,14 @@ pipeline {
         }
         stage('Docker Build') {
             steps {
-                sh 'docker build -t airisk-backend ./backend'
+                sh 'docker build -t airiskdetector-backend ./backend'
+                sh 'docker build -t airiskdetector-frontend ./frontend'
             }
         }
         stage('Deploy') {
             steps {
                 sh 'echo Deploying application...'
+                // Add actual deploy commands here
             }
         }
     }
