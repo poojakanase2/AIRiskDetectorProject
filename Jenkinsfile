@@ -7,9 +7,9 @@ pipeline {
                     sh '''
                         python3 -m venv .venv
                         . .venv/bin/activate
-                        .venv/bin/pip install --upgrade pip
-                        .venv/bin/pip install flake8
-                        .venv/bin/flake8 .
+                        pip install --upgrade pip
+                        pip install flake8
+                        flake8 .
                     '''
                 }
             }
@@ -19,8 +19,8 @@ pipeline {
                 dir('backend') {
                     sh '''
                         . .venv/bin/activate
-                        .venv/bin/pip install -r requirements.txt
-                        .venv/bin/python -m pytest
+                        pip install -r requirements.txt
+                        pytest
                     '''
                 }
             }
@@ -28,20 +28,14 @@ pipeline {
         stage('Frontend Lint') {
             steps {
                 dir('frontend') {
-                    sh '''
-                        echo "Linting frontend (HTML/CSS/JS)"
-                        # Add custom lint commands if needed
-                    '''
+                    sh 'echo "Linting frontend (HTML/CSS/JS)"'
                 }
             }
         }
         stage('Frontend Smoke Test') {
             steps {
                 dir('frontend') {
-                    sh '''
-                        echo "Running frontend smoke tests"
-                        # Add custom smoke test commands if needed
-                    '''
+                    sh 'echo "Running frontend smoke tests"'
                 }
             }
         }
