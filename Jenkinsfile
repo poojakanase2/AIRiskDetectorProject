@@ -4,41 +4,36 @@ pipeline {
         stage('Checkout') {
             steps {
                 echo 'Cloning repository...'
-                git url: 'https://github.com/poojakanase2/AIRiskDetectorProject.git'
+                git url: 'https://github.com/poojakanase2/AIRiskDetectorProject.git', branch: 'main'
             }
         }
         stage('Build') {
             steps {
                 dir('backend') {
+                    sh 'python3 -m pip install --upgrade pip --break-system-packages'
                     sh 'python3 -m pip install -r requirements.txt --break-system-packages'
-                    sh 'pytest'
-                }
-                dir('frontend') {
-                    sh 'echo "No build needed for vanilla JS frontend"'
+                    sh 'python3 -m pytest'
                 }
             }
         }
         stage('Code Scan') {
             steps {
                 dir('backend') {
-                    sh 'pylint app/'
+                    sh 'python3 -m pip install flake8 --break-system-packages'
+                    sh 'flake8 .'
                 }
             }
         }
         stage('Docker Build') {
             steps {
-                dir('backend') {
-                    sh 'docker build -t inventory-backend:latest .'
-                }
-                dir('frontend') {
-                    sh 'docker build -t inventory-frontend:latest .'
-                }
+                sh 'docker build -t airisk-backend ./backend'
+                sh 'docker build -t airisk-frontend ./frontend'
             }
         }
         stage('Deploy') {
             steps {
                 echo 'Deploying application...'
-                // Add your deployment steps here
+                // Add your deployment commands here
             }
         }
     }
