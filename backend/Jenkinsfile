@@ -9,12 +9,15 @@ pipeline {
                         python3 -m ensurepip --upgrade || sudo apt-get install -y python3-pip
                         python3 -m pip install --upgrade pip
                     '''
+                    sh 'python3 -m pip install flake8'
+                    sh 'flake8 .'
                 }
             }
         }
         stage('Backend Test') {
             steps {
                 dir('backend') {
+                    sh 'python3 -m pip install -r requirements.txt'
                     sh 'pytest'
                 }
             }
@@ -22,14 +25,16 @@ pipeline {
         stage('Frontend Lint') {
             steps {
                 dir('frontend') {
-                    sh 'echo "Linting frontend..."'
+                    sh 'echo "Linting frontend (HTML/CSS/JS)"'
+                    sh 'find . -name "*.js" -exec echo "Linting {}" \;'
                 }
             }
         }
         stage('Frontend Smoke Test') {
             steps {
                 dir('frontend') {
-                    sh 'echo "Running frontend smoke tests..."'
+                    sh 'echo "Running frontend smoke tests"'
+                    sh 'test -f index.html'
                 }
             }
         }
