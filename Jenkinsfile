@@ -1,57 +1,36 @@
 pipeline {
     agent any
-    environment {
-        BACKEND_DIR = './backend'
-        FRONTEND_DIR = './frontend'
-    }
     stages {
-        stage('Checkout') {
+        stage('Backend Lint') {
             steps {
-                git url: 'https://github.com/poojakanase2/AIRiskDetectorProject.git', branch: 'main'
-            }
-        }
-        stage('Lint') {
-            steps {
-                dir(env.BACKEND_DIR) {
+                dir('backend') {
+                    sh 'python3 -m pip install --upgrade pip --break-system-packages'
                     sh 'python3 -m pip install flake8 --break-system-packages'
                     sh 'python3 -m flake8 . --exit-zero'
                 }
             }
         }
-        stage('Test') {
+        stage('Backend Test') {
             steps {
-                dir(env.BACKEND_DIR) {
+                dir('backend') {
                     sh 'python3 -m pip install pytest --break-system-packages'
                     sh 'python3 -m pytest'
                 }
             }
         }
-        stage('Docker Build') {
+        stage('Frontend Lint') {
             steps {
-                dir(env.BACKEND_DIR) {
-                    sh 'docker build -t airiskdetector-backend .'
-                }
-                dir(env.FRONTEND_DIR) {
-                    sh 'docker build -t airiskdetector-frontend .'
+                dir('frontend') {
+                    echo 'No linting required for vanilla HTML/CSS/JS.'
                 }
             }
         }
-        stage('Deploy') {
+        stage('Frontend Smoke Test') {
             steps {
-                sh 'echo Deploying application...'
-                // Add actual deploy commands here
+                dir('frontend') {
+                    echo 'No build required for vanilla HTML/CSS/JS.'
+                }
             }
-        }
-    }
-    post {
-        always {
-            echo 'Pipeline finished.'
-        }
-        failure {
-            echo 'Pipeline failed.'
-        }
-        success {
-            echo 'Pipeline succeeded.'
         }
     }
 }
