@@ -1,41 +1,64 @@
 pipeline {
     agent any
+
+    environment {
+        APP_NAME = "PaymentService"
+        DOCKER_IMAGE = "payment-app"
+    }
+
     stages {
+
         stage('Checkout') {
             steps {
+                echo "Checking out source code..."
+
                 git url: 'https://github.com/poojakanase2/AIRiskDetectorProject.git', branch: 'main'
             }
         }
-        stage('Backend Lint') {
+
+        stage('Build') {
             steps {
-                dir('backend') {
-                    sh 'python3 -m pip install --upgrade pip --break-system-packages'
-                    sh 'python3 -m pip install flake8 --break-system-packages'
-                    sh 'python3 -m flake8 . --exit-zero'
-                }
+                echo "Building application..."
+
+                sh 'mvn clean package'
             }
         }
-        stage('Backend Test') {
+
+        stage('Test') {
             steps {
-                dir('backend') {
-                    sh 'python3 -m pip install pytest --break-system-packages'
-                    sh 'python3 -m pytest || [ $? -eq 5 ]'
-                }
+                echo "Running unit tests..."
+
+                sh 'mvn test'
             }
         }
-        stage('Frontend Lint') {
+
+        stage('Docker Build') {
             steps {
-                dir('frontend') {
-                    sh 'echo "Linting frontend (no npm needed)"'
-                }
+                echo "Creating Docker image..."
+
+                sh 'docker build -t payment-app:v1 .'
             }
         }
-        stage('Frontend Smoke Test') {
+
+        stage('Deploy') {
             steps {
-                dir('frontend') {
-                    sh 'echo "Running frontend smoke tests (no npm needed)"'
-                }
+                echo "Deploying application..."
+
+                sh 'kubectl apply -f deployment.yaml'
             }
+        }
+    }
+
+    post {
+
+        success {
+            echo "Build completed successfully"
+        }
+
+        always {
+            echo "Cleaning workspace..."
+
+            cleanWs()
         }
     }
 }
