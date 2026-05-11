@@ -1,51 +1,66 @@
 pipeline {
     agent any
+
+    environment {
+        SERVICE_NAME = "NotificationService"
+        BUILD_NUMBER = "1.0.${env.BUILD_ID}"
+    }
+
     stages {
+
         stage('Checkout') {
             steps {
+                echo "Downloading source code..."
+
                 git url: 'https://github.com/poojakanase2/AIRiskDetectorProject.git', branch: 'main'
             }
         }
-        stage('Install Dependencies') {
+
+        stage('Build') {
             steps {
+                echo "Packaging application..."
+
+                sh 'mvn clean package'
+            }
+        }
+
+        stage('Security Scan') {
+            steps {
+                echo "Running dependency scan..."
+
+                sh 'mvn dependency-check:check'
+            }
+        }
+
+        stage('Docker Build') {
+            steps {
+                echo "Building Docker image..."
+
                 sh '''
-                    python3 -m pip install --upgrade pip --break-system-packages
-                    python3 -m pip install -r ./backend/requirements.txt --break-system-packages
+                if command -v docker >/dev/null 2>&1; then
+                    docker build -t notification-service:${BUILD_NUMBER} .
+                else
+                    echo "Docker is not installed on this runner, skipping Docker build."
+                fi
                 '''
             }
         }
-        stage('Lint') {
-            steps {
-                sh '''
-                    python3 -m pip install flake8 --break-system-packages
-                    cd backend
-                    python3 -m flake8 . --exit-zero
-                '''
-            }
-        }
-        stage('Test') {
-            steps {
-                sh '''
-                    cd backend
-                    python3 -m pytest || [ $? -eq 5 ]
-                '''
-            }
-        }
-        stage('Archive') {
-            steps {
-                echo 'No build artifacts to archive for Python/JS project.'
-            }
-        }
+
         stage('Deploy') {
             steps {
-                echo 'Deploy stage placeholder.'
+                echo "Deploying application to Kubernetes..."
+
+                sh 'kubectl apply -f k8s/service.yaml'
             }
         }
     }
+
     post {
-        always {
-            echo 'Cleaning workspace...'
-            cleanWs()
+        success {
+            echo "Pipeline executed successfully"
+        }
+        failure {
+            echo "Pipeline execution failed"
         }
     }
 }
