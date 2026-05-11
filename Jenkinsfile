@@ -2,25 +2,25 @@ pipeline {
     agent any
 
     environment {
-        APP_NAME = "InventoryManager"
-        IMAGE_NAME = "inventory-manager:v1"
+        APP_NAME = "CustomerService"
+        DOCKER_TAG = "latest"
     }
 
     stages {
 
         stage('Checkout') {
             steps {
-                echo "Checking out code from repository..."
+                echo "Cloning GitHub repository..."
                 git url: 'https://github.com/poojakanase2/AIRiskDetectorProject.git', branch: 'main'
             }
         }
 
         stage('Build') {
             steps {
-                echo "Building project using Maven..."
+                echo "Building Java application..."
                 sh '''
                     if command -v mvn >/dev/null 2>&1; then
-                        mvn clean package
+                        mvn clean install
                     else
                         echo "mvn is not installed on this runner, skipping this step."
                     fi
@@ -28,12 +28,12 @@ pipeline {
             }
         }
 
-        stage('Code Quality') {
+        stage('Test') {
             steps {
-                echo "Running code quality scan..."
+                echo "Executing unit tests..."
                 sh '''
                     if command -v mvn >/dev/null 2>&1; then
-                        mvn sonar:sonar
+                        mvn test
                     else
                         echo "mvn is not installed on this runner, skipping this step."
                     fi
@@ -41,12 +41,12 @@ pipeline {
             }
         }
 
-        stage('Docker Build') {
+        stage('Docker Push') {
             steps {
-                echo "Building Docker image..."
+                echo "Pushing Docker image..."
                 sh '''
                     if command -v docker >/dev/null 2>&1; then
-                        docker build -t $IMAGE_NAME .
+                        docker push customer-service:$DOCKER_TAG
                     else
                         echo "docker is not installed on this runner, skipping this step."
                     fi
@@ -56,10 +56,10 @@ pipeline {
 
         stage('Deploy') {
             steps {
-                echo "Deploying application to Kubernetes..."
+                echo "Deploying application..."
                 sh '''
                     if command -v kubectl >/dev/null 2>&1; then
-                        kubectl apply -f k8s/deployment.yaml
+                        kubectl apply -f deployment.yaml
                     else
                         echo "kubectl is not installed on this runner, skipping this step."
                     fi
@@ -70,11 +70,10 @@ pipeline {
 
     post {
         success {
-            echo "Pipeline executed successfully"
+            echo "Pipeline completed successfully"
         }
-        always {
-            echo "Removing temporary files..."
-            cleanWs()
+        failure {
+            echo "Build failed"
         }
     }
 }
