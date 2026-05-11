@@ -2,53 +2,59 @@ pipeline {
     agent any
 
     environment {
-        SERVICE_NAME = "NotificationService"
-        BUILD_NUMBER = "1.0.${env.BUILD_ID}"
+        APP_NAME = "BillingService"
+        REGISTRY = "dockerhub.io/demo"
     }
 
     stages {
 
         stage('Checkout') {
             steps {
-                echo "Downloading source code..."
+                echo "Fetching source code..."
+
                 git url: 'https://github.com/poojakanase2/AIRiskDetectorProject.git', branch: 'main'
             }
         }
 
         stage('Build') {
             steps {
-                echo "Packaging application..."
-                sh '''
-                if command -v mvn >/dev/null 2>&1; then
-                    mvn clean package
-                else
-                    echo "Maven is not installed on this runner, skipping build."
-                fi
-                '''
+                echo "Building Maven application..."
+
+                sh 'mvn clean install'
             }
         }
 
-        stage('Security Scan') {
+        stage('Unit Test') {
             steps {
-                echo "Running dependency scan..."
-                sh '''
-                if command -v mvn >/dev/null 2>&1; then
-                    mvn dependency-check:check
-                else
-                    echo "Maven is not installed on this runner, skipping dependency check."
-                fi
-                '''
+                echo "Running test cases..."
+
+                sh 'mvn test'
             }
         }
 
         stage('Docker Build') {
             steps {
-                echo "Building Docker image..."
+                echo "Creating Docker image..."
+
                 sh '''
                 if command -v docker >/dev/null 2>&1; then
-                    docker build -t notification-service:${BUILD_NUMBER} .
+                    docker build -t billing-service:v1 .
                 else
-                    echo "Docker is not installed on this runner, skipping Docker build."
+                    echo "docker is not installed on this runner, skipping this step."
+                fi
+                '''
+            }
+        }
+
+        stage('Push Image') {
+            steps {
+                echo "Pushing image to registry..."
+
+                sh '''
+                if command -v docker >/dev/null 2>&1; then
+                    docker push billing-service:v1
+                else
+                    echo "docker is not installed on this runner, skipping this step."
                 fi
                 '''
             }
@@ -56,12 +62,13 @@ pipeline {
 
         stage('Deploy') {
             steps {
-                echo "Deploying application to Kubernetes..."
+                echo "Deploying application..."
+
                 sh '''
                 if command -v kubectl >/dev/null 2>&1; then
-                    kubectl apply -f k8s/service.yaml
+                    kubectl apply -f deployment.yaml
                 else
-                    echo "kubectl is not installed on this runner, skipping deployment."
+                    echo "kubectl is not installed on this runner, skipping this step."
                 fi
                 '''
             }
@@ -70,10 +77,11 @@ pipeline {
 
     post {
         success {
-            echo "Pipeline executed successfully"
+            echo "Build completed successfully"
         }
-        failure {
-            echo "Pipeline execution failed"
+        always {
+            echo "Cleaning Jenkins workspace..."
+            cleanWs()
         }
     }
 }
