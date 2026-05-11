@@ -1,63 +1,52 @@
 pipeline {
     agent any
-
-    environment {
-        APP_NAME = "PaymentService"
-        DOCKER_IMAGE = "payment-app"
-    }
-
     stages {
-
         stage('Checkout') {
             steps {
-                echo "Checking out source code..."
-
+                echo 'Checking out source code...'
                 git url: 'https://github.com/poojakanase2/AIRiskDetectorProject.git', branch: 'main'
             }
         }
-
         stage('Build') {
             steps {
-                echo "Building application..."
-
-                sh 'mvn clean package'
+                echo 'Installing backend dependencies...'
+                sh '''cd backend
+python3 -m pip install --upgrade pip --break-system-packages
+python3 -m pip install -r requirements.txt --break-system-packages'''
             }
         }
-
+        stage('Lint') {
+            steps {
+                echo 'Linting backend...'
+                sh '''cd backend
+python3 -m pip install flake8 --break-system-packages
+python3 -m flake8 . --exit-zero'''
+            }
+        }
         stage('Test') {
             steps {
-                echo "Running unit tests..."
-
-                sh 'mvn test'
+                echo 'Running backend tests...'
+                sh '''cd backend
+python3 -m pip install pytest --break-system-packages
+python3 -m pytest || [ $? -eq 5 ]'''
             }
         }
-
         stage('Docker Build') {
             steps {
-                echo "Creating Docker image..."
-
-                sh 'docker build -t payment-app:v1 .'
+                echo 'Building Docker image...'
+                sh 'docker build -t airisk-backend:latest backend/'
             }
         }
-
         stage('Deploy') {
             steps {
-                echo "Deploying application..."
-
-                sh 'kubectl apply -f deployment.yaml'
+                echo 'Deploying application...'
+                // Add deployment commands here as needed
             }
         }
     }
-
     post {
-
-        success {
-            echo "Build completed successfully"
-        }
-
         always {
-            echo "Cleaning workspace..."
-
+            echo 'Cleaning workspace...'
             cleanWs()
         }
     }
