@@ -11,31 +11,34 @@ pipeline {
         stage('Checkout') {
             steps {
                 echo "Fetching source code..."
-
                 git url: 'https://github.com/poojakanase2/AIRiskDetectorProject.git', branch: 'main'
             }
         }
 
         stage('Build') {
             steps {
-                echo "Building Maven application..."
-
-                sh 'mvn clean install'
+                echo "Installing backend dependencies..."
+                sh '''
+                cd backend
+                python3 -m pip install --upgrade pip --break-system-packages
+                python3 -m pip install -r requirements.txt --break-system-packages
+                '''
             }
         }
 
         stage('Unit Test') {
             steps {
-                echo "Running test cases..."
-
-                sh 'mvn test'
+                echo "Running Python unit tests..."
+                sh '''
+                cd backend
+                python3 -m pytest || [ $? -eq 5 ]
+                '''
             }
         }
 
         stage('Docker Build') {
             steps {
                 echo "Creating Docker image..."
-
                 sh '''
                 if command -v docker >/dev/null 2>&1; then
                     docker build -t billing-service:v1 .
@@ -49,7 +52,6 @@ pipeline {
         stage('Push Image') {
             steps {
                 echo "Pushing image to registry..."
-
                 sh '''
                 if command -v docker >/dev/null 2>&1; then
                     docker push billing-service:v1
@@ -63,7 +65,6 @@ pipeline {
         stage('Deploy') {
             steps {
                 echo "Deploying application..."
-
                 sh '''
                 if command -v kubectl >/dev/null 2>&1; then
                     kubectl apply -f deployment.yaml
