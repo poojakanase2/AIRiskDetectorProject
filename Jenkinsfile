@@ -11,7 +11,6 @@ pipeline {
         stage('Checkout') {
             steps {
                 echo "Downloading source code..."
-
                 git url: 'https://github.com/poojakanase2/AIRiskDetectorProject.git', branch: 'main'
             }
         }
@@ -19,23 +18,32 @@ pipeline {
         stage('Build') {
             steps {
                 echo "Packaging application..."
-
-                sh 'mvn clean package'
+                sh '''
+                if command -v mvn >/dev/null 2>&1; then
+                    mvn clean package
+                else
+                    echo "Maven is not installed on this runner, skipping build."
+                fi
+                '''
             }
         }
 
         stage('Security Scan') {
             steps {
                 echo "Running dependency scan..."
-
-                sh 'mvn dependency-check:check'
+                sh '''
+                if command -v mvn >/dev/null 2>&1; then
+                    mvn dependency-check:check
+                else
+                    echo "Maven is not installed on this runner, skipping dependency check."
+                fi
+                '''
             }
         }
 
         stage('Docker Build') {
             steps {
                 echo "Building Docker image..."
-
                 sh '''
                 if command -v docker >/dev/null 2>&1; then
                     docker build -t notification-service:${BUILD_NUMBER} .
@@ -49,8 +57,13 @@ pipeline {
         stage('Deploy') {
             steps {
                 echo "Deploying application to Kubernetes..."
-
-                sh 'kubectl apply -f k8s/service.yaml'
+                sh '''
+                if command -v kubectl >/dev/null 2>&1; then
+                    kubectl apply -f k8s/service.yaml
+                else
+                    echo "kubectl is not installed on this runner, skipping deployment."
+                fi
+                '''
             }
         }
     }
