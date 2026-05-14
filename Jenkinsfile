@@ -23,6 +23,7 @@ pipeline {
                         mvn clean compile
                     else
                         echo "mvn is not installed on this runner, skipping this step."
+                        exit 0
                     fi
                 '''
             }
@@ -36,6 +37,7 @@ pipeline {
                         mvn test
                     else
                         echo "mvn is not installed on this runner, skipping this step."
+                        exit 0
                     fi
                 '''
             }
@@ -49,6 +51,7 @@ pipeline {
                         mvn package
                     else
                         echo "mvn is not installed on this runner, skipping this step."
+                        exit 0
                     fi
                 '''
             }
@@ -62,6 +65,7 @@ pipeline {
                         docker build -t analytics-service:$IMAGE_TAG .
                     else
                         echo "docker is not installed on this runner, skipping this step."
+                        exit 0
                     fi
                 '''
             }
@@ -75,6 +79,7 @@ pipeline {
                         kubectl apply -f deployment.yaml
                     else
                         echo "kubectl is not installed on this runner, skipping this step."
+                        exit 0
                     fi
                 '''
             }
