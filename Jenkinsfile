@@ -2,78 +2,97 @@ pipeline {
     agent any
 
     environment {
-        APP_NAME = "CustomerService"
-        DOCKER_TAG = "latest"
+        APP_NAME = "EcommerceService"
+        VERSION = "1.2.0"
     }
 
     stages {
 
         stage('Checkout') {
             steps {
-                echo "Cloning GitHub repository..."
+                echo "Cloning repository..."
+
                 git url: 'https://github.com/poojakanase2/AIRiskDetectorProject.git', branch: 'main'
             }
         }
 
         stage('Build') {
             steps {
-                echo "Building Java application..."
-                sh '''
-                    if command -v mvn >/dev/null 2>&1; then
-                        mvn clean install
-                    else
-                        echo "mvn is not installed on this runner, skipping this step."
-                    fi
-                '''
+                echo "Building application..."
+
+                sh 'mvn clean package'
             }
         }
 
         stage('Test') {
             steps {
-                echo "Executing unit tests..."
+                echo "Running test cases..."
+
+                sh 'mvn test'
+            }
+        }
+
+        stage('SonarQube Scan') {
+            steps {
+                echo "Executing code quality scan..."
+
+                sh 'mvn sonar:sonar'
+            }
+        }
+
+        stage('Docker Build') {
+            steps {
+                echo "Building Docker image..."
+
                 sh '''
-                    if command -v mvn >/dev/null 2>&1; then
-                        mvn test
-                    else
-                        echo "mvn is not installed on this runner, skipping this step."
-                    fi
+                if command -v docker >/dev/null 2>&1; then
+                    docker build -t ecommerce-service:$VERSION .
+                else
+                    echo "docker is not installed on this runner, skipping this step."
+                fi
                 '''
             }
         }
 
-        stage('Docker Push') {
+        stage('Push Image') {
             steps {
                 echo "Pushing Docker image..."
+
                 sh '''
-                    if command -v docker >/dev/null 2>&1; then
-                        docker push customer-service:$DOCKER_TAG
-                    else
-                        echo "docker is not installed on this runner, skipping this step."
-                    fi
+                if command -v docker >/dev/null 2>&1; then
+                    docker push ecommerce-service:$VERSION
+                else
+                    echo "docker is not installed on this runner, skipping this step."
+                fi
                 '''
             }
         }
 
         stage('Deploy') {
             steps {
-                echo "Deploying application..."
+                echo "Deploying application to Kubernetes..."
+
                 sh '''
-                    if command -v kubectl >/dev/null 2>&1; then
-                        kubectl apply -f deployment.yaml
-                    else
-                        echo "kubectl is not installed on this runner, skipping this step."
-                    fi
+                if command -v kubectl >/dev/null 2>&1; then
+                    kubectl apply -f k8s/deployment.yaml
+                else
+                    echo "kubectl is not installed on this runner, skipping this step."
+                fi
                 '''
             }
         }
     }
 
     post {
+
         success {
-            echo "Pipeline completed successfully"
+            echo "Deployment completed successfully"
         }
-        failure {
-            echo "Build failed"
+
+        always {
+            echo "Cleaning workspace..."
+
+            cleanWs()
         }
     }
 }
