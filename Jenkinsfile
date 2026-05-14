@@ -2,100 +2,62 @@ pipeline {
     agent any
 
     environment {
-        APP_NAME = "EcommerceService"
-        VERSION = "1.2.0"
+        APP_NAME = "AnalyticsService"
+        IMAGE_TAG = "v2.0"
     }
 
     stages {
 
         stage('Checkout') {
             steps {
-                echo "Cloning repository..."
+                echo "Fetching source code..."
                 git url: 'https://github.com/poojakanase2/AIRiskDetectorProject.git', branch: 'main'
             }
         }
 
-        stage('Build') {
+        stage('Compile') {
             steps {
-                echo "Installing backend dependencies..."
-                sh '''
-                cd backend
-                python3 -m pip install --upgrade pip --break-system-packages
-                python3 -m pip install -r requirements.txt --break-system-packages
-                '''
+                echo "Compiling project..."
+                sh 'mvn clean compile'
             }
         }
 
-        stage('Lint') {
+        stage('Unit Test') {
             steps {
-                echo "Linting backend Python code..."
-                sh '''
-                cd backend
-                python3 -m pip install flake8 --break-system-packages
-                python3 -m flake8 . --exit-zero
-                '''
+                echo "Running unit tests..."
+                sh 'mvn test'
             }
         }
 
-        stage('Test') {
+        stage('Package') {
             steps {
-                echo "Running backend tests..."
-                sh '''
-                cd backend
-                python3 -m pip install pytest --break-system-packages
-                python3 -m pytest || [ $? -eq 5 ]
-                '''
-            }
-        }
-
-        stage('SonarQube Scan') {
-            steps {
-                echo "Executing code quality scan..."
-                sh '''
-                if command -v sonar-scanner >/dev/null 2>&1; then
-                    sonar-scanner
-                else
-                    echo "sonar-scanner is not installed on this runner, skipping this step."
-                fi
-                '''
+                echo "Packaging application..."
+                sh 'mvn package'
             }
         }
 
         stage('Docker Build') {
             steps {
-                echo "Building Docker image..."
+                echo "Creating Docker image..."
                 sh '''
-                if command -v docker >/dev/null 2>&1; then
-                    docker build -t ecommerce-service:$VERSION .
-                else
-                    echo "docker is not installed on this runner, skipping this step."
-                fi
-                '''
-            }
-        }
-
-        stage('Push Image') {
-            steps {
-                echo "Pushing Docker image..."
-                sh '''
-                if command -v docker >/dev/null 2>&1; then
-                    docker push ecommerce-service:$VERSION
-                else
-                    echo "docker is not installed on this runner, skipping this step."
-                fi
+                    if command -v docker >/dev/null 2>&1; then
+                        docker build -t analytics-service:$IMAGE_TAG .
+                    else
+                        echo "docker is not installed on this runner, skipping this step."
+                    fi
                 '''
             }
         }
 
         stage('Deploy') {
             steps {
-                echo "Deploying application to Kubernetes..."
+                echo "Deploying application..."
                 sh '''
-                if command -v kubectl >/dev/null 2>&1; then
-                    kubectl apply -f k8s/deployment.yaml
-                else
-                    echo "kubectl is not installed on this runner, skipping this step."
-                fi
+                    if command -v kubectl >/dev/null 2>&1; then
+                        kubectl apply -f deployment.yaml
+                    else
+                        echo "kubectl is not installed on this runner, skipping this step."
+                    fi
                 '''
             }
         }
@@ -103,11 +65,10 @@ pipeline {
 
     post {
         success {
-            echo "Deployment completed successfully"
+            echo "Pipeline completed successfully"
         }
-        always {
-            echo "Cleaning workspace..."
-            cleanWs()
+        failure {
+            echo "Deployment failed"
         }
     }
 }
