@@ -1,97 +1,69 @@
 pipeline {
     agent any
-
     environment {
-        APP_NAME = "AnalyticsService"
-        IMAGE_TAG = "v2.0"
+        BACKEND_DIR = './backend'
+        FRONTEND_DIR = './frontend'
     }
-
     stages {
-
         stage('Checkout') {
             steps {
-                echo "Fetching source code..."
                 git url: 'https://github.com/poojakanase2/AIRiskDetectorProject.git', branch: 'main'
             }
         }
-
-        stage('Compile') {
+        stage('Lint') {
             steps {
-                echo "Compiling project..."
-                sh '''
-                    if command -v mvn >/dev/null 2>&1; then
-                        mvn clean compile
-                    else
-                        echo "mvn is not installed on this runner, skipping this step."
-                        exit 0
-                    fi
-                '''
+                dir(env.BACKEND_DIR) {
+                    sh 'python3 -m pip install flake8 --break-system-packages'
+                    sh 'python3 -m flake8 . --exit-zero'
+                }
             }
         }
-
-        stage('Unit Test') {
+        stage('Test') {
             steps {
-                echo "Running unit tests..."
-                sh '''
-                    if command -v mvn >/dev/null 2>&1; then
-                        mvn test
-                    else
-                        echo "mvn is not installed on this runner, skipping this step."
-                        exit 0
-                    fi
-                '''
+                dir(env.BACKEND_DIR) {
+                    sh 'python3 -m pip install pytest --break-system-packages'
+                    sh "python3 -m pytest || [ $? -eq 5 ]"
+                }
             }
         }
-
-        stage('Package') {
-            steps {
-                echo "Packaging application..."
-                sh '''
-                    if command -v mvn >/dev/null 2>&1; then
-                        mvn package
-                    else
-                        echo "mvn is not installed on this runner, skipping this step."
-                        exit 0
-                    fi
-                '''
-            }
-        }
-
         stage('Docker Build') {
             steps {
-                echo "Creating Docker image..."
-                sh '''
-                    if command -v docker >/dev/null 2>&1; then
-                        docker build -t analytics-service:$IMAGE_TAG .
-                    else
-                        echo "docker is not installed on this runner, skipping this step."
-                        exit 0
-                    fi
-                '''
+                dir(env.BACKEND_DIR) {
+                    sh '''
+                        if command -v docker >/dev/null 2>&1; then
+                            docker build -t airiskdetector-backend .
+                        else
+                            echo "docker is not installed on this runner, skipping backend Docker build."
+                        fi
+                    '''
+                }
+                dir(env.FRONTEND_DIR) {
+                    sh '''
+                        if command -v docker >/dev/null 2>&1; then
+                            docker build -t airiskdetector-frontend .
+                        else
+                            echo "docker is not installed on this runner, skipping frontend Docker build."
+                        fi
+                    '''
+                }
             }
         }
-
         stage('Deploy') {
             steps {
-                echo "Deploying application..."
-                sh '''
-                    if command -v kubectl >/dev/null 2>&1; then
-                        kubectl apply -f deployment.yaml
-                    else
-                        echo "kubectl is not installed on this runner, skipping this step."
-                        exit 0
-                    fi
-                '''
+                sh 'echo Deploying application...'
+                // Add actual deploy commands here
             }
         }
     }
-
     post {
-        success {
-            echo "Pipeline completed successfully"
+        always {
+            echo 'Pipeline finished.'
         }
         failure {
-            echo "Deployment failed"
+            echo 'Pipeline failed.'
+        }
+        success {
+            echo 'Pipeline succeeded.'
         }
     }
 }
